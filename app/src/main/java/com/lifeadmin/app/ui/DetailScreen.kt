@@ -77,8 +77,10 @@ fun DetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
 ) {
-    val item by vm.observeItem(itemId).collectAsStateWithLifecycle(initialValue = null)
-    val history by vm.observeHistory(itemId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val itemFlow = remember(itemId) { vm.observeItem(itemId) }
+    val historyFlow = remember(itemId) { vm.observeHistory(itemId) }
+    val item by itemFlow.collectAsStateWithLifecycle(initialValue = null)
+    val history by historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val today = remember { LocalDate.now() }
     val extra = Extra.colors
     val snackbar = remember { SnackbarHostState() }

@@ -28,6 +28,20 @@ jobs:
           chmod +x gradlew
           ./gradlew testDebugUnitTest --stacktrace
 
+      - name: Report test results
+        if: always()
+        run: |
+          for f in app/build/test-results/testDebugUnitTest/*.xml; do
+            [ -f "$f" ] || continue
+            line=$(grep -o '<testsuite [^>]*>' "$f" | head -1)
+            name=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
+            tests=$(echo "$line" | sed -n 's/.*tests="\([0-9]*\)".*/\1/p')
+            fails=$(echo "$line" | sed -n 's/.*failures="\([0-9]*\)".*/\1/p')
+            errs=$(echo "$line" | sed -n 's/.*errors="\([0-9]*\)".*/\1/p')
+            skip=$(echo "$line" | sed -n 's/.*skipped="\([0-9]*\)".*/\1/p')
+            echo "::notice title=Tests::$name tests=$tests failures=$fails errors=$errs skipped=$skip"
+          done
+
       - name: Build test APK
         run: ./gradlew assembleDebug --stacktrace
 
