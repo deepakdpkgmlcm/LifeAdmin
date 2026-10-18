@@ -58,6 +58,8 @@ class MigrationTest {
         assertEquals(AlertStyle.NOTIFICATION, items[0].alertStyle)
         assertEquals(false, items[0].done)
         assertTrue(items[0].lastFiredAt > 0)
+        assertEquals("", items[0].reference)
+        assertEquals("", items[0].paymentMethod)
 
         // New-style items save and load.
         db.itemDao().insert(

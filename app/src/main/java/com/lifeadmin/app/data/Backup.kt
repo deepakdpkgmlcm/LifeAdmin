@@ -38,6 +38,8 @@ object Backup {
                     put("nagCount", i.nagCount)
                     put("done", i.done)
                     if (i.doneAt != null) put("doneAt", i.doneAt)
+                    put("reference", i.reference)
+                    put("paymentMethod", i.paymentMethod)
                 })
             }
         })
@@ -97,6 +99,8 @@ object Backup {
                 nagCount = o.optInt("nagCount", 0),
                 done = o.optBoolean("done", false),
                 doneAt = if (o.has("doneAt")) o.getLong("doneAt") else null,
+                reference = o.optString("reference", ""),
+                paymentMethod = o.optString("paymentMethod", ""),
             )
         }
         val historyJson = root.optJSONArray("history") ?: JSONArray()

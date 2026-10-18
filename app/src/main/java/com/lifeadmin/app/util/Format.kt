@@ -136,6 +136,15 @@ object Format {
         else -> "$minutes min before"
     }
 
+    /** "5 min", "2 h", "1 day", "3 days" for repeat-alert intervals. */
+    fun interval(minutes: Int): String = when {
+        minutes < 60 -> "$minutes min"
+        minutes < 1440 -> if (minutes % 60 == 0) "${minutes / 60} h" else "${minutes / 60} h ${minutes % 60} min"
+        minutes == 1440 -> "1 day"
+        minutes % 1440 == 0 -> "${minutes / 1440} days"
+        else -> "${minutes / 60} h"
+    }
+
     /** "At the time, 15 min before, 1 day before" */
     fun alertsText(item: Item): String {
         val offsets = item.alertOffsetList().sorted()

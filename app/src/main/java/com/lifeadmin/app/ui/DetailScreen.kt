@@ -239,10 +239,14 @@ fun DetailScreen(
                         )
                     }
                 }
+                if (current.paymentMethod.isNotBlank()) InfoRow("Paid by", current.paymentMethod)
+                if (current.reference.isNotBlank()) {
+                    InfoRow(if (current.kind == Kind.PAYMENT) "Account no." else "Policy / doc no.", current.reference)
+                }
                 InfoRow("Alerts", Format.alertsText(current))
                 InfoRow("Style", current.alertStyle.label)
                 if (current.nagEveryMin > 0 && current.nagCount > 0) {
-                    InfoRow("Repeat alert", "Every ${current.nagEveryMin} min, ${current.nagCount}×")
+                    InfoRow("Keep reminding", "Every ${Format.interval(current.nagEveryMin)}, up to ${current.nagCount}×")
                 }
                 InfoRow(
                     "Added",

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -101,7 +102,8 @@ private val ALL_DAY_ALERTS = listOf(0, 1440, 2880, 10080, 20160, 43200, 129600)
 private val REPEAT_UNITS = listOf(
     Cycle.NONE, Cycle.MINUTES, Cycle.HOURS, Cycle.DAILY, Cycle.WEEKLY, Cycle.MONTHLY, Cycle.YEARLY
 )
-private val NAG_OPTIONS = listOf(0, 1, 2, 5, 10, 15, 30)
+private val NAG_OPTIONS = listOf(0, 1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440)
+private val PAYMENT_METHODS = listOf("", "Auto-debit", "Card", "UPI", "Bank transfer", "Cash", "Other")
 
 private fun unitName(c: Cycle): String = when (c) {
     Cycle.NONE -> "Never"
@@ -146,8 +148,11 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
     var amountText by rememberSaveable { mutableStateOf("") }
     var currency by rememberSaveable { mutableStateOf(vm.settings.currency) }
     var notes by rememberSaveable { mutableStateOf("") }
-    var alerts by rememberSaveable { mutableStateOf("0") }
-    var alertStyle by rememberSaveable { mutableStateOf(AlertStyle.NOTIFICATION) }
+    var alerts by rememberSaveable { mutableStateOf(vm.settings.defaultAlerts(Kind.REMINDER)) }
+    var alertStyle by rememberSaveable { mutableStateOf(vm.settings.defaultStyle(Kind.REMINDER)) }
+    var reference by rememberSaveable { mutableStateOf("") }
+    var paymentMethod by rememberSaveable { mutableStateOf("") }
+    var customAlert by remember { mutableStateOf(false) }
     var nagEvery by rememberSaveable { mutableIntStateOf(0) }
     var nagCount by rememberSaveable { mutableIntStateOf(3) }
 
@@ -192,6 +197,8 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 alertStyle = s.alertStyle
                 nagEvery = s.nagEveryMin
                 if (s.nagCount > 0) nagCount = s.nagCount
+                reference = s.reference
+                paymentMethod = s.paymentMethod
             }
             loaded = true
         }
@@ -230,6 +237,8 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 alertStyle = alertStyle,
                 nagEveryMin = nagEvery,
                 nagCount = nagCount,
+                reference = reference,
+                paymentMethod = paymentMethod,
             )
         )
         onDone()
@@ -265,13 +274,11 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 onSelect = { k ->
                     kind = k
                     if (category.defaultKind != k && category != Category.OTHER) category = firstCategory(k)
-                    if (isNew && k != Kind.REMINDER && !subDaily) {
-                        allDay = true
-                        alerts = "10080,1440,0"
-                    }
-                    if (isNew && k == Kind.REMINDER) {
-                        allDay = false
-                        alerts = "0"
+                    if (isNew) {
+                        if (k != Kind.REMINDER && !subDaily) allDay = true
+                        if (k == Kind.REMINDER) allDay = false
+                        alerts = vm.settings.defaultAlerts(k)
+                        alertStyle = vm.settings.defaultStyle(k)
                     }
                 }
             )
@@ -308,8 +315,8 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                                     } else {
                                         allDay = true
                                     }
-                                    if (t.alarm) alertStyle = AlertStyle.ALARM
-                                    alerts = if (t.minute != null || kind == Kind.REMINDER) "0" else "10080,1440,0"
+                                    alertStyle = if (t.alarm) AlertStyle.ALARM else vm.settings.defaultStyle(kind)
+                                    alerts = vm.settings.defaultAlerts(kind)
                                 },
                                 label = { Text(t.title) }
                             )
@@ -458,17 +465,24 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                             label = { Text(if (m == 0 && !timed) "On the day" else Format.offsetText(m)) }
                         )
                     }
+                    item {
+                        AssistChip(
+                            onClick = { customAlert = true },
+                            label = { Text("Custom…") },
+                            leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)) }
+                        )
+                    }
                 }
                 SelectField(
                     label = "Repeat the alert",
                     selected = nagEvery,
                     options = NAG_OPTIONS,
-                    optionLabel = { if (it == 0) "Off" else "Every $it min until handled" },
+                    optionLabel = { if (it == 0) "Off" else "Every ${Format.interval(it)} until handled" },
                     onSelect = { nagEvery = it },
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (nagEvery > 0) {
-                    Stepper("Up to", nagCount, 1..20, 1, if (nagCount == 1) "time" else "times") { nagCount = it }
+                    Stepper("Up to", nagCount, 1..30, 1, if (nagCount == 1) "time" else "times") { nagCount = it }
                 }
                 if (!exactOk) {
                     PermissionHint("Exact timing is off, so alerts may arrive a few minutes late.", "Allow") {
@@ -494,7 +508,7 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
 
             // ---- Money (payments & renewals) ----
             if (kind != Kind.REMINDER) {
-                LabeledCard("Amount") {
+                LabeledCard(if (kind == Kind.PAYMENT) "Payment details" else "Renewal details") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = amountText,
@@ -519,6 +533,29 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                             modifier = Modifier.width(110.dp)
                         )
                     }
+                    if (kind == Kind.PAYMENT) {
+                        SelectField(
+                            label = "Paid by",
+                            selected = paymentMethod,
+                            options = PAYMENT_METHODS,
+                            optionLabel = { it.ifEmpty { "Not set" } },
+                            onSelect = {
+                                paymentMethod = it
+                                if (it == "Auto-debit" && cycle != Cycle.NONE) autoRenew = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    OutlinedTextField(
+                        value = reference,
+                        onValueChange = { reference = it },
+                        label = {
+                            Text(if (kind == Kind.PAYMENT) "Account / customer number (optional)" else "Policy / document number (optional)")
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -595,6 +632,17 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
         )
     }
 
+    if (customAlert) {
+        CustomAlertDialog(
+            onDismiss = { customAlert = false },
+            onAdd = { m ->
+                customAlert = false
+                val updated = selectedAlerts + m
+                alerts = updated.sortedDescending().joinToString(",")
+            }
+        )
+    }
+
     if (confirmDelete && itemId != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -612,8 +660,42 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
     }
 }
 
+/** "Remind me N minutes/hours/days/weeks before" with any number. */
 @Composable
-private fun <T> ChoicePills(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+private fun CustomAlertDialog(onDismiss: () -> Unit, onAdd: (Int) -> Unit) {
+    var amount by remember { mutableStateOf("3") }
+    var unit by remember { mutableIntStateOf(2) } // 0 min, 1 hours, 2 days, 3 weeks
+    val multipliers = listOf(1, 60, 1440, 10080)
+    val value = amount.toIntOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Custom reminder") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { new -> if (new.length <= 4 && new.all { it.isDigit() }) amount = new },
+                    label = { Text("How many") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                ChoicePills(listOf(0, 1, 2, 3), unit, { listOf("Min", "Hours", "Days", "Weeks")[it] }) { unit = it }
+                Text("before it's due", color = Extra.colors.muted)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = value != null && value > 0,
+                onClick = { onAdd((value ?: 0) * multipliers[unit]) }
+            ) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+fun <T> ChoicePills(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     val extra = Extra.colors
     Row(
         Modifier

@@ -26,6 +26,25 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_ONBOARDED, false)
         set(value) = prefs.edit().putBoolean(KEY_ONBOARDED, value).apply()
 
+    /** Alerts new items of this kind start with (minutes before, comma separated, or "none"). */
+    fun defaultAlerts(kind: Kind): String =
+        prefs.getString("alerts_${kind.name}", null) ?: when (kind) {
+            Kind.REMINDER -> "0"
+            Kind.PAYMENT -> "4320,1440,0"
+            Kind.RENEWAL -> "43200,10080,1440,0"
+        }
+
+    fun setDefaultAlerts(kind: Kind, value: String) =
+        prefs.edit().putString("alerts_${kind.name}", value).apply()
+
+    fun defaultStyle(kind: Kind): AlertStyle =
+        prefs.getString("style_${kind.name}", null)
+            ?.let { name -> AlertStyle.entries.firstOrNull { it.name == name } }
+            ?: AlertStyle.NOTIFICATION
+
+    fun setDefaultStyle(kind: Kind, style: AlertStyle) =
+        prefs.edit().putString("style_${kind.name}", style.name).apply()
+
     /** True once the long first-launch animation has played. */
     var splashSeen: Boolean
         get() = prefs.getBoolean("splash_seen", false)

@@ -73,8 +73,10 @@ fun ItemsScreen(
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var sort by rememberSaveable { mutableStateOf(Sort.DUE) }
     var showDone by rememberSaveable { mutableStateOf(false) }
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
     val doneCount = all.count { it.done }
-    val active = all.filter { it.done == showDone }
+    val kindCounts = all.filter { it.done == showDone }.groupingBy { it.kind }.eachCount()
+    val active = all.filter { it.done == showDone && (typeFilter == null || it.kind.name == typeFilter) }
 
     val counts = active.groupingBy { it.category }.eachCount()
     val q = query.trim().lowercase(Locale.getDefault())
@@ -138,6 +140,15 @@ fun ItemsScreen(
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 )
+            }
+
+            if (kindCounts.size > 1) {
+                item(key = "types") {
+                    TypeFilterRow(kindCounts, typeFilter, onSelect = {
+                        typeFilter = it
+                        category = null
+                    })
+                }
             }
 
             if (counts.isNotEmpty()) {

@@ -51,6 +51,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.lifeadmin.app.BuildConfig
 import com.lifeadmin.app.reminders.AlarmScheduler
+import com.lifeadmin.app.data.AlertStyle
+import com.lifeadmin.app.data.Item
+import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.util.Format
 import com.lifeadmin.app.reminders.Notifier
 import android.net.Uri
 import android.os.Build
@@ -207,6 +211,26 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
             }
 
+            LabeledCard("Defaults for new items") {
+                Text(
+                    "Each type starts with these alerts and style. You can still change them per item.",
+                    color = extra.muted,
+                    fontSize = 13.sp
+                )
+                Kind.entries.forEach { k -> KindDefaults(vm, k) }
+                OutlinedButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Sounds per type (Reminders, Payments, Expiry, Alarms)") }
+            }
+
             LabeledCard("Money") {
                 OutlinedTextField(
                     value = currency,
@@ -300,6 +324,49 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 }
 
 private const val TEST_NOTIFICATION_ID = 999_999
+
+private val DEFAULT_TIMED = listOf(0, 5, 10, 15, 30, 60, 1440)
+private val DEFAULT_ALL_DAY = listOf(0, 1440, 4320, 10080, 20160, 43200, 129600)
+
+@Composable
+private fun KindDefaults(vm: AppViewModel, kind: Kind) {
+    val extra = Extra.colors
+    var alerts by remember { mutableStateOf(vm.settings.defaultAlerts(kind)) }
+    var style by remember { mutableStateOf(vm.settings.defaultStyle(kind)) }
+    val selected = if (alerts == Item.NO_ALERTS) emptySet() else alerts.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+    val timed = kind == Kind.REMINDER
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            when (kind) {
+                Kind.REMINDER -> "Reminders"
+                Kind.PAYMENT -> "Payments"
+                Kind.RENEWAL -> "Expiry & renewals"
+            },
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp
+        )
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val options = ((if (timed) DEFAULT_TIMED else DEFAULT_ALL_DAY) + selected).distinct().sorted()
+            items(options.size) { i ->
+                val m = options[i]
+                androidx.compose.material3.FilterChip(
+                    selected = m in selected,
+                    onClick = {
+                        val updated = if (m in selected) selected - m else selected + m
+                        alerts = if (updated.isEmpty()) Item.NO_ALERTS else updated.sortedDescending().joinToString(",")
+                        vm.settings.setDefaultAlerts(kind, alerts)
+                    },
+                    label = { Text(if (m == 0 && !timed) "On the day" else Format.offsetText(m)) }
+                )
+            }
+        }
+        ChoicePills(AlertStyle.entries.toList(), style, { it.label }) {
+            style = it
+            vm.settings.setDefaultStyle(kind, it)
+        }
+        androidx.compose.material3.HorizontalDivider(color = extra.line)
+    }
+}
 
 @Composable
 private fun PermissionRow(title: String, ok: Boolean, okText: String, offText: String, onFix: () -> Unit) {

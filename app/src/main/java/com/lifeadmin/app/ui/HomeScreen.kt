@@ -104,6 +104,7 @@ fun HomeScreen(
     val defMin = vm.defaultMinute
     fun isOverdue(item: Item) = itemUrgency(item, Schedule.occurrence(item, defMin), now) == Urgency.OVERDUE
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedDay = selectedEpochDay?.let { LocalDate.ofEpochDay(it) }
 
@@ -166,8 +167,10 @@ fun HomeScreen(
             all == null -> Unit // first load
             all.isEmpty() -> EmptyState(today, Modifier.padding(padding), onAdd, onSettings)
             else -> {
-                val shown = all.filter { filter == null || it.category.name == filter }
-                val categories = all.map { it.category }.distinct().sortedBy { it.ordinal }
+                val ofType = all.filter { typeFilter == null || it.kind.name == typeFilter }
+                val shown = ofType.filter { filter == null || it.category.name == filter }
+                val categories = ofType.map { it.category }.distinct().sortedBy { it.ordinal }
+                val kindCounts = all.groupingBy { it.kind }.eachCount()
                 val weekEnd = today.plusDays(6)
                 val busyDays = all.map { it.dueDate() }
                     .filter { !it.isBefore(today) && !it.isAfter(weekEnd) }
@@ -215,6 +218,20 @@ fun HomeScreen(
                             },
                             modifier = Modifier.padding(top = 14.dp)
                         )
+                    }
+
+                    if (kindCounts.size > 1) {
+                        item(key = "types") {
+                            TypeFilterRow(
+                                counts = kindCounts,
+                                selected = typeFilter,
+                                onSelect = {
+                                    typeFilter = it
+                                    filter = null
+                                },
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        }
                     }
 
                     if (categories.size > 1) {

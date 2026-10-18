@@ -145,6 +145,12 @@ data class Item(
     val doneAt: Long? = null,
     /** A snoozed alert waiting to go off (epoch millis). */
     val snoozedUntil: Long? = null,
+
+    // ---- v4: renewal / payment details ----
+    /** Account, policy or document number. */
+    val reference: String = "",
+    /** How it's paid: "Auto-debit", "Card", "UPI", ... (empty = not set). */
+    val paymentMethod: String = "",
 ) {
     companion object {
         const val NOT_NOTIFIED = Int.MAX_VALUE

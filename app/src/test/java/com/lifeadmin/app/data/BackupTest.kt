@@ -26,7 +26,8 @@ class BackupTest {
                 id = 11, title = "Stand up", category = Category.HEALTH, dueEpochDay = 20750, createdAt = 789L,
                 dueMinute = 615, cycle = Cycle.WEEKLY, repeatEvery = 2, repeatDays = "1,3,5", repeatLimit = 4,
                 repeatUntilEpochDay = 21000, alertOffsets = "0,10", alertStyle = AlertStyle.ALARM,
-                nagEveryMin = 5, nagCount = 3, done = true, doneAt = 5L
+                nagEveryMin = 5, nagCount = 3, done = true, doneAt = 5L,
+                reference = "POL-123", paymentMethod = "UPI"
             ),
         )
         val history = listOf(

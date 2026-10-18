@@ -25,6 +25,8 @@ object Notifier {
     private const val CHANNEL_REMINDERS = "reminders_v2"
     private const val OLD_CHANNEL = "reminders"
     private const val CHANNEL_ALARMS = "alarms_v1"
+    private const val CHANNEL_PAYMENTS = "payments_v1"
+    private const val CHANNEL_EXPIRY = "expiry_v1"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -32,7 +34,19 @@ object Notifier {
         nm.deleteNotificationChannel(OLD_CHANNEL)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Reminders, due dates, renewals and payments"
+                description = "Tasks and everyday reminders"
+                enableVibration(true)
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_PAYMENTS, "Payments", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Bills, subscriptions and other payments coming due"
+                enableVibration(true)
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_EXPIRY, "Expiry & renewals", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Documents, insurance, vehicle papers and warranties expiring"
                 enableVibration(true)
             }
         )
@@ -101,7 +115,13 @@ object Notifier {
         if (!canNotify(context)) return
         val id = item.id.toInt()
         val alarm = item.alertStyle == AlertStyle.ALARM
-        val builder = NotificationCompat.Builder(context, if (alarm) CHANNEL_ALARMS else CHANNEL_REMINDERS)
+        val channel = when {
+            alarm -> CHANNEL_ALARMS
+            item.kind == com.lifeadmin.app.data.Kind.PAYMENT -> CHANNEL_PAYMENTS
+            item.kind == com.lifeadmin.app.data.Kind.RENEWAL -> CHANNEL_EXPIRY
+            else -> CHANNEL_REMINDERS
+        }
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(item.title)
             .setContentText(text)

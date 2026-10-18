@@ -1,6 +1,9 @@
 package com.lifeadmin.app.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -152,5 +155,48 @@ fun ClickableField(
                 .matchParentSize()
                 .clickable(onClick = onClick)
         )
+    }
+}
+
+private fun kindPlural(kind: com.lifeadmin.app.data.Kind): String = when (kind) {
+    com.lifeadmin.app.data.Kind.REMINDER -> "Reminders"
+    com.lifeadmin.app.data.Kind.PAYMENT -> "Payments"
+    com.lifeadmin.app.data.Kind.RENEWAL -> "Expiry"
+}
+
+/** All / Reminders / Payments / Expiry, with counts. [selected] is a Kind name or null for all. */
+@Composable
+fun TypeFilterRow(
+    counts: Map<com.lifeadmin.app.data.Kind, Int>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val extra = Extra.colors
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        modifier = modifier
+    ) {
+        val entries: List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "All") +
+            com.lifeadmin.app.data.Kind.entries
+                .filter { (counts[it] ?: 0) > 0 }
+                .map { it.name to "${kindPlural(it)} ${counts[it]}" }
+        items(entries.size) { i ->
+            val (key, label) = entries[i]
+            val active = selected == key
+            val shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
+            Text(
+                label,
+                color = if (active) extra.onInk else extra.ink,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(shape)
+                    .background(if (active) extra.ink else extra.card)
+                    .then(if (active) Modifier else Modifier.border(1.dp, extra.line, shape))
+                    .clickable { onSelect(if (active) null else key) }
+                    .padding(horizontal = 14.dp, vertical = 9.dp)
+            )
+        }
     }
 }

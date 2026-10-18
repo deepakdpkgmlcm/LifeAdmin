@@ -45,6 +45,8 @@ data class Draft(
     val alertStyle: AlertStyle,
     val nagEveryMin: Int,
     val nagCount: Int,
+    val reference: String = "",
+    val paymentMethod: String = "",
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -101,6 +103,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 alertStyle = d.alertStyle,
                 nagEveryMin = d.nagEveryMin,
                 nagCount = if (d.nagEveryMin > 0) d.nagCount else 0,
+                reference = if (d.kind == Kind.REMINDER) "" else d.reference.trim(),
+                paymentMethod = if (d.kind == Kind.PAYMENT) d.paymentMethod else "",
                 // Editing the time re-arms its alerts from now on.
                 lastFiredAt = if (scheduleChanged) System.currentTimeMillis() - 1 else base.lastFiredAt,
                 snoozedUntil = if (scheduleChanged) null else base.snoozedUntil,
