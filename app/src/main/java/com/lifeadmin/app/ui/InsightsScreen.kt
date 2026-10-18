@@ -59,8 +59,12 @@ fun InsightsScreen(
     val today = remember { LocalDate.now() }
     val extra = Extra.colors
     val currency = vm.settings.currency
-    val inCurrency = all.filter { it.amount != null && it.currency.equals(currency, ignoreCase = true) }
-    val otherCurrencies = all.count { it.amount != null && !it.currency.equals(currency, ignoreCase = true) }
+    val conv = remember(currency) { vm.settings.converter() }
+    // Everything with an amount, converted into the main currency where a rate is known.
+    val inCurrency = all.mapNotNull { i ->
+        i.amount?.let { conv(it, i.currency) }?.let { i.copy(amount = it, currency = currency) }
+    }
+    val otherCurrencies = all.count { i -> i.amount != null && conv(i.amount, i.currency) == null }
 
     val recurring = inCurrency.filter { it.cycle != Cycle.NONE }
     val perMonth = recurring.sumOf { it.amount!! * it.cycle.perMonthFor(it.repeatEvery) }
@@ -71,16 +75,12 @@ fun InsightsScreen(
     val maxCategory = byCategory.maxOfOrNull { it.second } ?: 0.0
 
     val next30 = all.filter { it.daysLeft(today) in 0..30 }
-    val next30Total = next30
-        .filter { it.amount != null && it.currency.equals(currency, ignoreCase = true) }
-        .sumOf { it.amount!! }
+    val next30Total = next30.sumOf { i -> i.amount?.let { conv(it, i.currency) } ?: 0.0 }
 
     val thisYear = history.filter {
         Instant.ofEpochMilli(it.paidAt).atZone(ZoneId.systemDefault()).year == today.year
     }
-    val paidThisYear = thisYear
-        .filter { it.amount != null && it.currency.equals(currency, ignoreCase = true) }
-        .sumOf { it.amount!! }
+    val paidThisYear = thisYear.sumOf { h -> h.amount?.let { conv(it, h.currency) } ?: 0.0 }
 
     val biggest = inCurrency
         .sortedByDescending { if (it.cycle == Cycle.NONE) it.amount!! else it.amount!! * it.cycle.perMonthFor(it.repeatEvery) * 12 }
@@ -173,7 +173,7 @@ fun InsightsScreen(
                 item(key = "note") {
                     Text(
                         "$otherCurrencies item(s) in other currencies aren't included in these totals. " +
-                            "Your default currency is $currency (change it in Settings).",
+                            "Add an exchange rate into $currency in Settings › Money to include them.",
                         color = extra.muted,
                         fontSize = 12.sp
                     )

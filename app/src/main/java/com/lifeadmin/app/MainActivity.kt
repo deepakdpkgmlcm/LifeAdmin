@@ -1,7 +1,11 @@
 package com.lifeadmin.app
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import android.os.SystemClock
+import com.lifeadmin.app.ui.AppLock
+import com.lifeadmin.app.ui.LockScreen
+import com.lifeadmin.app.data.AppSettings
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.tween
@@ -49,7 +53,14 @@ import com.lifeadmin.app.ui.Draft
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    /** App lock: true while the lock screen covers the app. */
+    private val locked = mutableStateOf(false)
+    /** When the app last went to the background (for the short grace period). */
+    private var leftAt = 0L
+    /** The prompt opens by itself once per lock; after a cancel the person taps Unlock. */
+    private var autoPrompted = false
+
     /** An app-icon shortcut waiting to be handled ("add reminder", "calendar", ...). */
     private val shortcut = mutableStateOf<String?>(null)
 
@@ -59,11 +70,44 @@ class MainActivity : ComponentActivity() {
         shortcut.value = intent?.action?.takeIf { it.startsWith(SHORTCUT_PREFIX) }
         // Opened from a reminder or a shortcut: go straight in, no launch animation.
         val skipSplash = intent?.getBooleanExtra(EXTRA_SKIP_SPLASH, false) == true || shortcut.value != null
+        if (savedInstanceState == null && lockEnabled()) lock()
         setContent {
             LifeAdminTheme {
                 AppRoot(skipSplash, shortcut.value) { shortcut.value = null }
+                if (locked.value) LockScreen(onUnlock = { askToUnlock() })
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Lock again after more than 30 seconds away.
+        if (lockEnabled() && leftAt != 0L && SystemClock.elapsedRealtime() - leftAt > LOCK_GRACE_MS) lock()
+        leftAt = 0L
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (locked.value && !autoPrompted) {
+            autoPrompted = true
+            askToUnlock()
+        }
+    }
+
+    private fun lock() {
+        locked.value = true
+        autoPrompted = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) leftAt = SystemClock.elapsedRealtime()
+    }
+
+    private fun lockEnabled() = AppSettings(this).appLock && AppLock.available(this)
+
+    private fun askToUnlock() {
+        AppLock.prompt(this) { locked.value = false }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -73,6 +117,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_SKIP_SPLASH = "skipSplash"
+        private const val LOCK_GRACE_MS = 30_000L
         const val SHORTCUT_PREFIX = "com.lifeadmin.app.shortcut."
     }
 }

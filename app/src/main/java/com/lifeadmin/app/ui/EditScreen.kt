@@ -1,5 +1,9 @@
 package com.lifeadmin.app.ui
 
+import java.time.YearMonth
+
+import com.lifeadmin.app.reminders.Schedule
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -436,6 +440,35 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                     )
                     if (cycle == Cycle.WEEKLY) {
                         WeekdayPicker(weekDays) { weekDays = it }
+                    }
+                    if (cycle == Cycle.MONTHLY || cycle == Cycle.QUARTERLY) {
+                        val due = LocalDate.ofEpochDay(dueEpochDay)
+                        val rules = monthlyRuleOptions(due)
+                        val current = repeatRule.takeIf { it in rules } ?: ""
+                        SelectField(
+                            label = "Repeats on",
+                            selected = current,
+                            options = rules,
+                            optionLabel = { monthlyRuleLabel(it, due) },
+                            onSelect = { rule ->
+                                repeatRule = rule
+                                if (rule.isNotEmpty()) {
+                                    // Move the date to match, e.g. the last Friday of this month (or next, if it has passed).
+                                    var d = Schedule.ruleDate(YearMonth.from(due), rule)
+                                    if (d.isBefore(LocalDate.now())) d = Schedule.ruleDate(YearMonth.from(due).plusMonths(1), rule)
+                                    dueEpochDay = d.toEpochDay()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (cycle == Cycle.DAILY) {
+                        SwitchRow(
+                            title = "Skip weekends",
+                            subtitle = "Only Monday to Friday",
+                            checked = repeatRule == Schedule.RULE_SKIP_WEEKENDS,
+                            onChange = { repeatRule = if (it) Schedule.RULE_SKIP_WEEKENDS else "" }
+                        )
                     }
                     Text("Ends", color = extra.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     ChoicePills(
@@ -920,4 +953,22 @@ private fun PermissionHint(text: String, action: String, onClick: () -> Unit) {
         Text(text, color = extra.soon, fontSize = 13.sp, modifier = Modifier.weight(1f))
         TextButton(onClick = onClick) { Text(action, fontWeight = FontWeight.Bold) }
     }
+}
+
+/** Monthly options for a due date: same date, last day, last working day, "2nd Tuesday", and "last Tuesday" in the final week. */
+private fun monthlyRuleOptions(due: LocalDate): List<String> {
+    val week = (due.dayOfMonth - 1) / 7 + 1
+    val dow = due.dayOfWeek.value
+    val list = mutableListOf("", Schedule.RULE_LAST_DAY, Schedule.RULE_LAST_WORKDAY)
+    if (week <= 4) list += Schedule.nthRule(week, dow)
+    if (due.plusDays(7).month != due.month) list += Schedule.nthRule(5, dow)
+    return list
+}
+
+private fun monthlyRuleLabel(rule: String, due: LocalDate): String = when {
+    rule.isEmpty() -> "Day ${due.dayOfMonth} of the month"
+    rule == Schedule.RULE_LAST_DAY -> "Last day of the month"
+    rule == Schedule.RULE_LAST_WORKDAY -> "Last working day"
+    rule.startsWith("NTH:") -> "The " + Format.nthText(rule)
+    else -> rule
 }

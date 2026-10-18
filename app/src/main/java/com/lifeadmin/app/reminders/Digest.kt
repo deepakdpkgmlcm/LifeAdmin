@@ -35,7 +35,8 @@ object Digest {
         val payments = dueToday.filter { it.kind == Kind.PAYMENT }
         if (reminders > 0) parts += if (reminders == 1) "1 reminder" else "$reminders reminders"
         if (payments.isNotEmpty()) {
-            val total = payments.filter { it.amount != null && it.currency.equals(currency, true) }.sumOf { it.amount!! }
+            val conv = AppSettings(context).converter()
+            val total = payments.sumOf { p -> p.amount?.let { conv(it, p.currency) } ?: 0.0 }
             parts += (if (payments.size == 1) "1 bill" else "${payments.size} bills") +
                 (if (total > 0) " (${Format.money(total, currency)})" else "")
         }

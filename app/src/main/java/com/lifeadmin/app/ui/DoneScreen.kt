@@ -103,10 +103,10 @@ fun DoneScreen(
     }
     val weekCount = ofKind.count { ChronoUnit.DAYS.between(dayOf(it), today) < 7 }
     val currency = vm.settings.currency
+    val conv = remember(currency) { vm.settings.converter() }
     val paidThisMonth = ofKind
-        .filter { it.amount != null && it.currency.equals(currency, ignoreCase = true) }
         .filter { dayOf(it).month == today.month && dayOf(it).year == today.year }
-        .sumOf { it.amount!! }
+        .sumOf { h -> h.amount?.let { conv(it, h.currency) } ?: 0.0 }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

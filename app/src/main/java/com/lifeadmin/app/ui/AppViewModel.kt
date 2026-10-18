@@ -183,7 +183,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 pinned = d.pinned,
                 priority = d.priority,
                 checklist = d.checklist,
-                repeatRule = if (d.cycle == Cycle.MONTHLY || d.cycle == Cycle.DAILY) d.repeatRule else "",
+                repeatRule = when (d.cycle) {
+                    Cycle.MONTHLY, Cycle.QUARTERLY -> d.repeatRule.takeIf { it != Schedule.RULE_SKIP_WEEKENDS }.orEmpty()
+                    Cycle.DAILY -> d.repeatRule.takeIf { it == Schedule.RULE_SKIP_WEEKENDS }.orEmpty()
+                    else -> ""
+                },
                 // Editing the time re-arms its alerts from now on.
                 lastFiredAt = if (scheduleChanged) System.currentTimeMillis() - 1 else base.lastFiredAt,
                 snoozedUntil = if (scheduleChanged) null else base.snoozedUntil,

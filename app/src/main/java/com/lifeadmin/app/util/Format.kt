@@ -119,12 +119,35 @@ object Format {
         } else {
             ""
         }
+        val rule = when {
+            item.repeatRule == com.lifeadmin.app.reminders.Schedule.RULE_LAST_DAY -> " on the last day"
+            item.repeatRule == com.lifeadmin.app.reminders.Schedule.RULE_LAST_WORKDAY -> " on the last working day"
+            item.repeatRule.startsWith("NTH:") -> " on the " + nthText(item.repeatRule)
+            item.repeatRule == com.lifeadmin.app.reminders.Schedule.RULE_SKIP_WEEKENDS -> ", skipping weekends"
+            else -> ""
+        }
         val end = when {
             item.repeatLimit != null -> " · ${item.repeatLimit} more " + if (item.repeatLimit == 1) "time" else "times"
             item.repeatUntilEpochDay != null -> " · until " + shortDate(LocalDate.ofEpochDay(item.repeatUntilEpochDay))
             else -> ""
         }
-        return base + onDays + end
+        return base + onDays + rule + end
+    }
+
+    /** "2nd Tuesday", "last Friday" for an "NTH:w:d" rule. */
+    fun nthText(rule: String): String {
+        val p = rule.split(":")
+        val week = p.getOrNull(1)?.toIntOrNull() ?: 1
+        val dow = DayOfWeek.of((p.getOrNull(2)?.toIntOrNull() ?: 1).coerceIn(1, 7))
+            .getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val ord = when (week) {
+            1 -> "1st"
+            2 -> "2nd"
+            3 -> "3rd"
+            4 -> "4th"
+            else -> "last"
+        }
+        return "$ord $dow"
     }
 
     fun offsetText(minutes: Int): String = when {

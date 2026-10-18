@@ -82,6 +82,9 @@ object Schedule {
                 val k = ChronoUnit.DAYS.between(start.toLocalDate(), base.toLocalDate()) / n
                 var t = start.plusDays(k * n)
                 while (!t.isAfter(base)) t = t.plusDays(n)
+                if (item.repeatRule == RULE_SKIP_WEEKENDS) {
+                    while (t.dayOfWeek == DayOfWeek.SATURDAY || t.dayOfWeek == DayOfWeek.SUNDAY) t = t.plusDays(1)
+                }
                 t
             }
             Cycle.WEEKLY -> {
@@ -96,13 +99,28 @@ object Schedule {
                 }
             }
             Cycle.MONTHLY, Cycle.QUARTERLY, Cycle.YEARLY -> {
-                var date = start.toLocalDate()
-                var guard = 0
-                while (!date.atTime(start.toLocalTime()).isAfter(base) && guard < 10_000) {
-                    date = item.cycle.next(date, item.repeatEvery)
-                    guard++
+                if (item.cycle != Cycle.YEARLY && monthlyRule(item.repeatRule)) {
+                    // "Last day", "last working day", "2nd Tuesday": step month by month and
+                    // place the date by the rule.
+                    val step = n * (if (item.cycle == Cycle.QUARTERLY) 3 else 1)
+                    var month = java.time.YearMonth.from(start.toLocalDate())
+                    var t = ruleDate(month, item.repeatRule).atTime(start.toLocalTime())
+                    var guard = 0
+                    while (!t.isAfter(base) && guard < 10_000) {
+                        month = month.plusMonths(step)
+                        t = ruleDate(month, item.repeatRule).atTime(start.toLocalTime())
+                        guard++
+                    }
+                    t
+                } else {
+                    var date = start.toLocalDate()
+                    var guard = 0
+                    while (!date.atTime(start.toLocalTime()).isAfter(base) && guard < 10_000) {
+                        date = item.cycle.next(date, item.repeatEvery)
+                        guard++
+                    }
+                    date.atTime(start.toLocalTime())
                 }
-                date.atTime(start.toLocalTime())
             }
         }
         val until = item.repeatUntilEpochDay
@@ -128,6 +146,34 @@ object Schedule {
             d = d.plusDays(1)
         }
         return null
+    }
+
+    const val RULE_LAST_DAY = "LAST_DAY"
+    const val RULE_LAST_WORKDAY = "LAST_WORKDAY"
+    const val RULE_SKIP_WEEKENDS = "SKIP_WEEKENDS"
+
+    /** "NTH:2:2" = 2nd Tuesday; week 5 means the last one in the month. */
+    fun nthRule(week: Int, isoDayOfWeek: Int) = "NTH:$week:$isoDayOfWeek"
+
+    private fun monthlyRule(rule: String) =
+        rule == RULE_LAST_DAY || rule == RULE_LAST_WORKDAY || rule.startsWith("NTH:")
+
+    /** Where a monthly rule lands in [month]. */
+    fun ruleDate(month: java.time.YearMonth, rule: String): java.time.LocalDate = when {
+        rule == RULE_LAST_DAY -> month.atEndOfMonth()
+        rule == RULE_LAST_WORKDAY -> {
+            var d = month.atEndOfMonth()
+            while (d.dayOfWeek == DayOfWeek.SATURDAY || d.dayOfWeek == DayOfWeek.SUNDAY) d = d.minusDays(1)
+            d
+        }
+        rule.startsWith("NTH:") -> {
+            val parts = rule.split(":")
+            val week = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val dow = DayOfWeek.of((parts.getOrNull(2)?.toIntOrNull() ?: 1).coerceIn(1, 7))
+            if (week >= 5) month.atEndOfMonth().with(TemporalAdjusters.previousOrSame(dow))
+            else month.atDay(1).with(TemporalAdjusters.dayOfWeekInMonth(week, dow))
+        }
+        else -> month.atDay(1)
     }
 
     /** The item moved to occurrence [to]. */

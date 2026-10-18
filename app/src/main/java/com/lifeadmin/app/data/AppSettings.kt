@@ -83,6 +83,35 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("splash_seen", false)
         set(value) = prefs.edit().putBoolean("splash_seen", value).apply()
 
+    // ---- Look ----
+    /** "SYSTEM", "LIGHT" or "DARK". */
+    var themeMode: String
+        get() = prefs.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
+        set(value) = prefs.edit().putString("theme_mode", value).apply()
+
+    var accent: String
+        get() = prefs.getString("accent", "TEAL") ?: "TEAL"
+        set(value) = prefs.edit().putString("accent", value).apply()
+
+    // ---- Money ----
+    /** Exchange rates into the main currency, "USD=83.2,EUR=90.1". */
+    var exchangeRates: String
+        get() = prefs.getString("fx_rates", "") ?: ""
+        set(value) = prefs.edit().putString("fx_rates", value).apply()
+
+    /** Converts an amount into the main currency with the saved rates; null when no rate is known. */
+    fun converter(): (Double, String) -> Double? {
+        val main = currency
+        val rates = com.lifeadmin.app.util.Money.parseRates(exchangeRates)
+        return { amount, from -> com.lifeadmin.app.util.Money.convert(amount, from, main, rates) }
+    }
+
+    // ---- Privacy ----
+    /** Ask for fingerprint, face or screen lock when the app opens. */
+    var appLock: Boolean
+        get() = prefs.getBoolean("app_lock", false)
+        set(value) = prefs.edit().putBoolean("app_lock", value).apply()
+
     private fun defaultCurrency(): String =
         try {
             Currency.getInstance(Locale.getDefault()).currencyCode

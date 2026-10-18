@@ -67,6 +67,21 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.lifeadmin.app.ui.theme.Accent
+import com.lifeadmin.app.ui.theme.ThemeState
+import com.lifeadmin.app.util.Money
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
@@ -303,10 +318,62 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "Totals on the Timeline and Insights use this currency.",
+                    "Totals on the Timeline, Insights and Done use this currency.",
                     color = extra.muted,
                     fontSize = 13.sp
                 )
+                ExchangeRates(vm, currency)
+            }
+
+            LabeledCard("Appearance") {
+                Text("Theme", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                ChoicePills(listOf("SYSTEM", "LIGHT", "DARK"), ThemeState.mode, {
+                    when (it) { "LIGHT" -> "Light"; "DARK" -> "Dark"; else -> "System" }
+                }) {
+                    ThemeState.mode = it
+                    vm.settings.themeMode = it
+                }
+                Text("Accent colour", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Accent.entries.forEach { a ->
+                        val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                        val selected = ThemeState.accent == a
+                        androidx.compose.foundation.layout.Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (dark) a.dark else a.light)
+                                .border(if (selected) 3.dp else 0.dp, if (selected) extra.ink else Color.Transparent, CircleShape)
+                                .clickable(role = Role.RadioButton, onClickLabel = a.label) {
+                                    ThemeState.accent = a
+                                    vm.settings.accent = a.name
+                                }
+                                .semantics { contentDescription = a.label + if (selected) ", selected" else "" },
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = if (dark) Color.Black else Color.White, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+
+            LabeledCard("Privacy") {
+                val lockAvailable = remember { AppLock.available(context) }
+                var lockOn by remember { mutableStateOf(vm.settings.appLock && lockAvailable) }
+                ToggleRow(
+                    "App lock",
+                    if (lockAvailable) "Ask for fingerprint, face or screen lock when opening the app"
+                    else "Set up a screen lock or fingerprint in your phone's settings to use this",
+                    lockOn
+                ) { on ->
+                    if (!lockAvailable) return@ToggleRow
+                    val activity = context as? androidx.fragment.app.FragmentActivity ?: return@ToggleRow
+                    // Confirm it's really them before turning the lock on or off.
+                    AppLock.prompt(activity) {
+                        lockOn = on
+                        vm.settings.appLock = on
+                    }
+                }
             }
 
             LabeledCard("Backup") {
@@ -381,6 +448,59 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 
 private const val TEST_NOTIFICATION_ID = 999_999
 private val HALF_HOURS = (0 until 48).map { it * 30 }
+
+/** Rates for other currencies, so their amounts count in the totals. */
+@Composable
+private fun ExchangeRates(vm: AppViewModel, main: String) {
+    val extra = Extra.colors
+    var rates by remember { mutableStateOf(Money.parseRates(vm.settings.exchangeRates)) }
+    var code by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("") }
+    fun save(new: Map<String, Double>) {
+        rates = new
+        vm.settings.exchangeRates = Money.ratesToString(new)
+    }
+    Text("Exchange rates", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    Text(
+        "Items in other currencies are added to totals using these rates. Update them now and then.",
+        color = extra.muted, fontSize = 12.sp
+    )
+    rates.entries.sortedBy { it.key }.forEach { (c, r) ->
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("1 $c = ${Format.money(r, main)}", fontSize = 14.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = { save(rates - c) }) { Text("Remove") }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = code,
+            onValueChange = { new -> if (new.length <= 3 && new.all { it.isLetter() }) code = new.uppercase(Locale.ROOT) },
+            label = { Text("Currency") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+            modifier = Modifier.weight(1f)
+        )
+        OutlinedTextField(
+            value = rate,
+            onValueChange = { new -> if (new.all { it.isDigit() || it == '.' }) rate = new },
+            label = { Text("= $main") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+            modifier = Modifier.weight(1f)
+        )
+        val value = rate.toDoubleOrNull()
+        TextButton(
+            enabled = code.length == 3 && !code.equals(main, true) && value != null && value > 0,
+            onClick = {
+                save(rates + (code to value!!))
+                code = ""
+                rate = ""
+            }
+        ) { Text("Add") }
+    }
+}
 
 @Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {

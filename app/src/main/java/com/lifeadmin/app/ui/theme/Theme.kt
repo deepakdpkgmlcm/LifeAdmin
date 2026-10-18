@@ -8,6 +8,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
@@ -165,12 +168,49 @@ object Extra {
         @Composable get() = LocalExtraColors.current
 }
 
+/** Accent colours the person can pick in Settings: light shade, its pale tint, dark shade, its deep tint. */
+enum class Accent(val label: String, val light: Color, val lightBg: Color, val dark: Color, val darkBg: Color, val onLightBg: Color) {
+    TEAL("Teal", Color(0xFF0F766E), Color(0xFFE6F4F1), Color(0xFF5EEAD4), Color(0xFF12302C), Color(0xFF0B4F49)),
+    INDIGO("Indigo", Color(0xFF4338CA), Color(0xFFEAE8FB), Color(0xFFA5B4FC), Color(0xFF1E1B4B), Color(0xFF312E81)),
+    ROSE("Rose", Color(0xFFBE123C), Color(0xFFFDE8EE), Color(0xFFFDA4AF), Color(0xFF3B0A18), Color(0xFF881337)),
+    AMBER("Amber", Color(0xFFB45309), Color(0xFFFEF3E2), Color(0xFFFCD34D), Color(0xFF33270F), Color(0xFF78350F)),
+    GRAPHITE("Graphite", Color(0xFF334155), Color(0xFFE8ECF0), Color(0xFFCBD5E1), Color(0xFF1E2833), Color(0xFF1E293B));
+
+    companion object {
+        fun of(name: String): Accent = entries.firstOrNull { it.name == name } ?: TEAL
+    }
+}
+
+/** Current look, set from Settings; changing it recolours the app at once. */
+object ThemeState {
+    /** "SYSTEM", "LIGHT" or "DARK". */
+    var mode by mutableStateOf("SYSTEM")
+    var accent by mutableStateOf(Accent.TEAL)
+
+    fun load(context: android.content.Context) {
+        val s = com.lifeadmin.app.data.AppSettings(context)
+        mode = s.themeMode
+        accent = Accent.of(s.accent)
+    }
+}
+
 @Composable
 fun LifeAdminTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    CompositionLocalProvider(LocalExtraColors provides if (dark) DarkExtra else LightExtra) {
+    val dark = when (ThemeState.mode) {
+        "LIGHT" -> false
+        "DARK" -> true
+        else -> isSystemInDarkTheme()
+    }
+    val a = ThemeState.accent
+    val scheme = if (dark) {
+        DarkColors.copy(primary = a.dark, primaryContainer = a.darkBg, onPrimaryContainer = a.lightBg)
+    } else {
+        LightColors.copy(primary = a.light, primaryContainer = a.lightBg, onPrimaryContainer = a.onLightBg)
+    }
+    val extra = if (dark) DarkExtra.copy(later = a.dark, laterBg = a.darkBg) else LightExtra.copy(later = a.light, laterBg = a.lightBg)
+    CompositionLocalProvider(LocalExtraColors provides extra) {
         MaterialTheme(
-            colorScheme = if (dark) DarkColors else LightColors,
+            colorScheme = scheme,
             typography = AppTypography,
             content = content
         )

@@ -5,4 +5,8 @@
     <string name="shortcut_add_payment">Add bill / payment</string>
     <string name="shortcut_add_expiry">Add document / expiry</string>
     <string name="shortcut_calendar">Calendar</string>
+    <string name="widget_today">LifeAdmin · Today</string>
+    <string name="widget_today_desc">Today\'s reminders, bills and expiries with a Done button</string>
+    <string name="widget_next">LifeAdmin · Next up</string>
+    <string name="widget_next_desc">The next thing coming up</string>
 </resources>

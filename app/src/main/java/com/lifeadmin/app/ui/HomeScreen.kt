@@ -168,12 +168,10 @@ fun HomeScreen(
                 val overdueCount = all.count { isOverdue(it) }
                 val weekCount = all.count { !isOverdue(it) && it.daysLeft(today) in 0..7 }
                 val currency = vm.settings.currency
+                val conv = remember(currency) { vm.settings.converter() }
                 val monthly = all
-                    .filter {
-                        it.kind != Kind.REMINDER && it.cycle != Cycle.NONE && it.amount != null &&
-                            it.currency.equals(currency, ignoreCase = true)
-                    }
-                    .sumOf { it.amount!! * it.cycle.perMonthFor(it.repeatEvery) }
+                    .filter { it.kind != Kind.REMINDER && it.cycle != Cycle.NONE && it.amount != null }
+                    .sumOf { (conv(it.amount!!, it.currency) ?: 0.0) * it.cycle.perMonthFor(it.repeatEvery) }
                 val perMonth = if (monthly > 0) Format.money(Math.round(monthly).toDouble(), currency) else "—"
 
                 LazyColumn(

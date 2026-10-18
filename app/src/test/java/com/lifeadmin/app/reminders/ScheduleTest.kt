@@ -134,6 +134,30 @@ class ScheduleTest {
     }
 
     @Test
+    fun lastDayAndLastWorkingDay() {
+        val lastDay = item(LocalDate.of(2026, 10, 31), cycle = Cycle.MONTHLY).copy(repeatRule = Schedule.RULE_LAST_DAY)
+        assertEquals(LocalDate.of(2026, 11, 30).atTime(9, 0), Schedule.nextOccurrence(lastDay, LocalDate.of(2026, 10, 31).atTime(9, 0), nine))
+        // Feb 2027 ends on a Sunday -> last working day is Friday 26 Feb.
+        val work = item(LocalDate.of(2027, 1, 29), cycle = Cycle.MONTHLY).copy(repeatRule = Schedule.RULE_LAST_WORKDAY)
+        assertEquals(LocalDate.of(2027, 2, 26).atTime(9, 0), Schedule.nextOccurrence(work, LocalDate.of(2027, 1, 29).atTime(9, 0), nine))
+    }
+
+    @Test
+    fun secondTuesdayAndLastFriday() {
+        val second = item(LocalDate.of(2026, 10, 13), cycle = Cycle.MONTHLY).copy(repeatRule = Schedule.nthRule(2, 2))
+        assertEquals(LocalDate.of(2026, 11, 10).atTime(9, 0), Schedule.nextOccurrence(second, LocalDate.of(2026, 10, 13).atTime(9, 0), nine))
+        val lastFri = item(LocalDate.of(2026, 10, 30), cycle = Cycle.MONTHLY).copy(repeatRule = Schedule.nthRule(5, 5))
+        assertEquals(LocalDate.of(2026, 11, 27).atTime(9, 0), Schedule.nextOccurrence(lastFri, LocalDate.of(2026, 10, 30).atTime(9, 0), nine))
+    }
+
+    @Test
+    fun dailySkippingWeekends() {
+        // Friday 23 Oct -> Monday 26 Oct
+        val it = item(LocalDate.of(2026, 10, 23), minute = 540, cycle = Cycle.DAILY).copy(repeatRule = Schedule.RULE_SKIP_WEEKENDS)
+        assertEquals(LocalDate.of(2026, 10, 26).atTime(9, 0), Schedule.nextOccurrence(it, LocalDate.of(2026, 10, 23).atTime(9, 0), nine))
+    }
+
+    @Test
     fun quietHoursWrapPastMidnight() {
         assertTrue(Schedule.inQuietHours(23 * 60, 22 * 60, 7 * 60))
         assertTrue(Schedule.inQuietHours(6 * 60, 22 * 60, 7 * 60))

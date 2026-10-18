@@ -72,6 +72,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.text.style.TextDecoration
 import com.lifeadmin.app.reminders.Schedule
@@ -143,6 +144,14 @@ fun DetailScreen(
                             "Share"
                         )
                     )
+                }
+                Spacer(Modifier.width(8.dp))
+                HeaderIconButton(Icons.Outlined.EventAvailable, "Add to calendar") {
+                    try {
+                        context.startActivity(calendarIntent(current, vm.defaultMinute))
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        scope.launch { snackbar.showSnackbar("No calendar app found") }
+                    }
                 }
                 Spacer(Modifier.width(8.dp))
                 HeaderIconButton(Icons.Outlined.Edit, "Edit", onEdit)
@@ -475,4 +484,31 @@ private fun CountdownRing(item: Item, days: Long, urgency: Urgency) {
             )
         }
     }
+}
+
+/** Opens the calendar app's "new event" screen filled in with this item, including how it repeats. */
+private fun calendarIntent(item: com.lifeadmin.app.data.Item, defaultMinute: Int): android.content.Intent {
+    val cc = android.provider.CalendarContract.Events.CONTENT_URI
+    val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).setData(cc)
+        .putExtra(android.provider.CalendarContract.Events.TITLE, item.title)
+    val desc = buildList {
+        if (item.amount != null) add(com.lifeadmin.app.util.Format.money(item.amount, item.currency))
+        if (item.reference.isNotBlank()) add(item.reference)
+        if (item.notes.isNotBlank()) add(item.notes)
+    }.joinToString("\n")
+    if (desc.isNotEmpty()) intent.putExtra(android.provider.CalendarContract.Events.DESCRIPTION, desc)
+    val minute = item.dueMinute
+    if (minute == null) {
+        // All-day events are given as UTC midnight.
+        val start = java.time.LocalDate.ofEpochDay(item.dueEpochDay).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        intent.putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, true)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, start + 24 * 60 * 60 * 1000L)
+    } else {
+        val start = Schedule.toMillis(Schedule.occurrence(item, defaultMinute), java.time.ZoneId.systemDefault())
+        intent.putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, start + 30 * 60 * 1000L)
+    }
+    com.lifeadmin.app.util.CalendarExport.rrule(item)?.let { intent.putExtra(android.provider.CalendarContract.Events.RRULE, it) }
+    return intent
 }
