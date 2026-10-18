@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,6 +105,7 @@ fun TimelineRow(
     modifier: Modifier = Modifier,
     now: LocalDateTime = LocalDateTime.now(),
     defaultMinute: Int = 9 * 60,
+    completing: Boolean = false,
 ) {
     val occurrence = Schedule.occurrence(item, defaultMinute)
     val urgency = itemUrgency(item, occurrence, now)
@@ -166,6 +168,7 @@ fun TimelineRow(
         ) {
             SwipeableCard(
                 item = item,
+                completing = completing,
                 badge = badge,
                 urgency = urgency,
                 onOpen = onOpen,
@@ -180,6 +183,7 @@ fun TimelineRow(
 @Composable
 private fun SwipeableCard(
     item: Item,
+    completing: Boolean,
     badge: String,
     urgency: Urgency,
     onOpen: () -> Unit,
@@ -250,13 +254,14 @@ private fun SwipeableCard(
             }
         }
     ) {
-        ItemCard(item = item, badge = badge, urgency = urgency, onOpen = onOpen, onRenew = onRenew)
+        ItemCard(item = item, completing = completing, badge = badge, urgency = urgency, onOpen = onOpen, onRenew = onRenew)
     }
 }
 
 @Composable
 private fun ItemCard(
     item: Item,
+    completing: Boolean,
     badge: String,
     urgency: Urgency,
     onOpen: () -> Unit,
@@ -266,7 +271,15 @@ private fun ItemCard(
     val uc = urgency.colors()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
+    val scale by animateFloatAsState(
+        when {
+            completing -> 0.96f
+            pressed -> 0.97f
+            else -> 1f
+        },
+        label = "press"
+    )
+    val contentAlpha by animateFloatAsState(if (completing) 0.55f else 1f, label = "doneAlpha")
 
     val subtitle = itemSubtitle(item)
 
@@ -281,6 +294,7 @@ private fun ItemCard(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                alpha = contentAlpha
             }
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -289,13 +303,23 @@ private fun ItemCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (urgency == Urgency.OVERDUE) uc.bg else extra.laterBg),
+                        .background(
+                            when {
+                                completing -> MaterialTheme.colorScheme.primary
+                                urgency == Urgency.OVERDUE -> uc.bg
+                                else -> extra.laterBg
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = item.category.icon(),
+                        imageVector = if (completing) Icons.Filled.Check else item.category.icon(),
                         contentDescription = item.category.label,
-                        tint = if (urgency == Urgency.OVERDUE) uc.fg else extra.later,
+                        tint = when {
+                            completing -> MaterialTheme.colorScheme.onPrimary
+                            urgency == Urgency.OVERDUE -> uc.fg
+                            else -> extra.later
+                        },
                         modifier = Modifier.size(19.dp)
                     )
                 }
@@ -305,6 +329,7 @@ private fun ItemCard(
                         text = item.title,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
+                        textDecoration = if (completing) TextDecoration.LineThrough else null,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -318,7 +343,7 @@ private fun ItemCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = badge,
+                    text = if (completing) item.kind.doneVerb else badge,
                     color = uc.fg,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -329,7 +354,7 @@ private fun ItemCard(
                         .padding(horizontal = 9.dp, vertical = 5.dp)
                 )
             }
-            if (urgency == Urgency.OVERDUE) {
+            if (urgency == Urgency.OVERDUE && !completing) {
                 Spacer(Modifier.height(10.dp))
                 Button(
                     onClick = onRenew,

@@ -32,7 +32,7 @@ class BackupTest {
         )
         val history = listOf(
             History(itemId = 7, itemTitle = "Netflix", category = Category.SUBSCRIPTION,
-                dueEpochDay = 20720, paidAt = 999L, amount = 15.49, currency = "USD")
+                dueEpochDay = 20720, paidAt = 999L, amount = 15.49, currency = "USD", kind = "PAYMENT")
         )
 
         val parsed = Backup.fromJson(Backup.toJson(items, history))

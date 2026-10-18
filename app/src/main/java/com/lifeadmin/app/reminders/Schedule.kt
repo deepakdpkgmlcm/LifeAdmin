@@ -168,6 +168,7 @@ object Schedule {
             paidAt = nowMillis,
             amount = if (item.kind == Kind.REMINDER) null else item.amount,
             currency = item.currency,
+            kind = item.kind.name,
         )
         val next = nextOccurrence(item, occurrence(item, defaultMinute), defaultMinute)
         val updated = if (next != null) {

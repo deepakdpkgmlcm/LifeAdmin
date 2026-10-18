@@ -90,6 +90,7 @@ fun DetailScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
+    UndoSnackbarEffect(vm, snackbar)
     var confirmDelete by remember { mutableStateOf(false) }
 
     // If the item disappears (deleted from the edit screen), leave this screen.
@@ -192,21 +193,8 @@ fun DetailScreen(
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val next = vm.complete(current)
-                        scope.launch {
-                            snackbar.currentSnackbarData?.dismiss()
-                            val r = snackbar.showSnackbar(
-                                if (next != null) {
-                                    "${current.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}" +
-                                        (if (current.dueMinute != null) " ${Format.time(next)}" else "")
-                                } else {
-                                    "${current.kind.doneVerb}: ${current.title}"
-                                },
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (r == SnackbarResult.ActionPerformed) vm.restore(current)
-                        }
+                        vm.completeWithFeedback(current)
+                        onBack()
                     },
                     shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = extra.ink, contentColor = extra.onInk),

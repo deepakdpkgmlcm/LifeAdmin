@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
@@ -25,6 +26,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +43,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "Timeline", Icons.Outlined.Timeline),
     CALENDAR("calendar", "Calendar", Icons.Outlined.CalendarMonth),
     ITEMS("items", "Items", Icons.Outlined.Inventory2),
+    DONE("done", "Done", Icons.Outlined.TaskAlt),
     INSIGHTS("insights", "Insights", Icons.Outlined.Insights),
 }
 
@@ -143,5 +147,22 @@ fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = extra.muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Shows the app-wide Undo bar (done / deleted) on whichever screen is open. */
+@Composable
+fun UndoSnackbarEffect(vm: AppViewModel, snackbar: androidx.compose.material3.SnackbarHostState) {
+    val event by vm.undoEvent.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(event) {
+        val e = event ?: return@LaunchedEffect
+        vm.consumeUndo(e)
+        snackbar.currentSnackbarData?.dismiss()
+        val result = snackbar.showSnackbar(
+            message = e.message,
+            actionLabel = if (e.restore != null) "Undo" else null,
+            duration = androidx.compose.material3.SnackbarDuration.Short
+        )
+        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) e.restore?.let { vm.restore(it) }
     }
 }

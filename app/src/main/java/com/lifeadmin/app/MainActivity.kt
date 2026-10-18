@@ -26,6 +26,7 @@ import com.lifeadmin.app.ui.AppBottomBar
 import com.lifeadmin.app.ui.AppViewModel
 import com.lifeadmin.app.ui.CalendarScreen
 import com.lifeadmin.app.ui.DetailScreen
+import com.lifeadmin.app.ui.DoneScreen
 import com.lifeadmin.app.ui.EditScreen
 import com.lifeadmin.app.ui.HomeScreen
 import com.lifeadmin.app.ui.InsightsScreen
@@ -137,6 +138,9 @@ private fun AppRoot(skipSplash: Boolean) {
                 onAdd = { nav.navigate("edit") },
                 bottomBar = { bar(Tab.ITEMS) }
             )
+        }
+        composable(Tab.DONE.route) {
+            DoneScreen(vm = vm, onOpen = { nav.openItem(it) }, bottomBar = { bar(Tab.DONE) })
         }
         composable(Tab.INSIGHTS.route) {
             InsightsScreen(vm = vm, onOpen = { nav.openItem(it) }, bottomBar = { bar(Tab.INSIGHTS) })

@@ -21,7 +21,12 @@ data class History(
     val paidAt: Long = System.currentTimeMillis(),
     val amount: Double? = null,
     val currency: String = "",
+    /** Kind name at the time it was completed ("" for records made before v0.6). */
+    val kind: String = "",
 )
+
+/** The kind this record belongs to, falling back to the category's usual kind for old records. */
+fun History.resolvedKind(): Kind = Kind.entries.firstOrNull { it.name == kind } ?: category.defaultKind
 
 @Dao
 interface HistoryDao {

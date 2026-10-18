@@ -127,20 +127,10 @@ fun HomeScreen(
         }
     }
 
-    val onDelete: (Item) -> Unit = { item ->
-        vm.deleteItem(item)
-        showUndo("Deleted ${item.title}") { vm.restore(item) }
-    }
-    val onRenew: (Item) -> Unit = { item ->
-        val next = vm.complete(item)
-        val message = if (next != null) {
-            "${item.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}" +
-                (if (item.dueMinute != null) " ${Format.time(next)}" else "")
-        } else {
-            "${item.kind.doneVerb}: ${item.title}"
-        }
-        showUndo(message) { vm.restore(item) }
-    }
+    val onDelete: (Item) -> Unit = { vm.deleteItem(it) }
+    val onRenew: (Item) -> Unit = { vm.completeWithFeedback(it) }
+    val completing by vm.completing.collectAsStateWithLifecycle()
+    UndoSnackbarEffect(vm, snackbar)
 
     NotificationPermissionRequest(vm.settings, trigger = !items.isNullOrEmpty())
 
@@ -282,24 +272,24 @@ fun HomeScreen(
                                 )
                             }
                         } else {
-                            timeline("day", null, extra.muted, dayItems, today, now, defMin, onOpen, onRenew, onDelete)
+                            timeline("day", null, extra.muted, dayItems, today, now, defMin, completing, onOpen, onRenew, onDelete)
                         }
                     } else {
                         timeline(
                             "overdue", "Overdue", extra.overdue,
-                            shown.filter { isOverdue(it) }, today, now, defMin, onOpen, onRenew, onDelete
+                            shown.filter { isOverdue(it) }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "week", "Next 7 days", extra.muted,
-                            shown.filter { !isOverdue(it) && it.daysLeft(today) in 0..7 }, today, now, defMin, onOpen, onRenew, onDelete
+                            shown.filter { !isOverdue(it) && it.daysLeft(today) in 0..7 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "month", "This month", extra.muted,
-                            shown.filter { it.daysLeft(today) in 8..30 }, today, now, defMin, onOpen, onRenew, onDelete
+                            shown.filter { it.daysLeft(today) in 8..30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "later", "Later", extra.muted,
-                            shown.filter { it.daysLeft(today) > 30 }, today, now, defMin, onOpen, onRenew, onDelete
+                            shown.filter { it.daysLeft(today) > 30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                     }
                 }
@@ -317,6 +307,7 @@ private fun LazyListScope.timeline(
     today: LocalDate,
     now: LocalDateTime,
     defaultMinute: Int,
+    completing: Set<Long>,
     onOpen: (Long) -> Unit,
     onRenew: (Item) -> Unit,
     onDelete: (Item) -> Unit,
@@ -338,7 +329,8 @@ private fun LazyListScope.timeline(
             onDelete = { onDelete(item) },
             modifier = Modifier.animateItem(),
             now = now,
-            defaultMinute = defaultMinute
+            defaultMinute = defaultMinute,
+            completing = item.id in completing
         )
     }
 }

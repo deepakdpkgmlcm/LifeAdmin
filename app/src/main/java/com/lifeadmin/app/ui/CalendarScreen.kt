@@ -89,6 +89,8 @@ fun CalendarScreen(
     val scope = rememberCoroutineScope()
 
     val byDate: Map<LocalDate, List<Item>> = all.groupBy { it.dueDate() }
+    val completing by vm.completing.collectAsStateWithLifecycle()
+    UndoSnackbarEffect(vm, snackbar)
 
     fun changeMonth(delta: Int) {
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -202,20 +204,12 @@ fun CalendarScreen(
                         isFirst = index == 0,
                         isLast = index == dayItems.lastIndex,
                         onOpen = { onOpen(item.id) },
-                        onRenew = {
-                            val next = vm.complete(item)
-                            undoable(
-                                if (next != null) "${item.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}"
-                                else "${item.kind.doneVerb}: ${item.title}"
-                            ) { vm.restore(item) }
-                        },
-                        onDelete = {
-                            vm.deleteItem(item)
-                            undoable("Deleted ${item.title}") { vm.restore(item) }
-                        },
+                        onRenew = { vm.completeWithFeedback(item) },
+                        onDelete = { vm.deleteItem(item) },
                         modifier = Modifier.animateItem(),
                         now = java.time.LocalDateTime.now(),
-                        defaultMinute = vm.defaultMinute
+                        defaultMinute = vm.defaultMinute,
+                        completing = item.id in completing
                     )
                 }
             }

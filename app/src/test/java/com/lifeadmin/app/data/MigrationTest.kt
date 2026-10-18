@@ -82,7 +82,9 @@ class MigrationTest {
                 dueEpochDay = 20000
             )
         )
-        assertEquals(1, db.historyDao().getAll().size)
+        val records = db.historyDao().getAll()
+        assertEquals(1, records.size)
+        assertEquals(Kind.RENEWAL, records[0].resolvedKind())
         db.close()
     }
 }

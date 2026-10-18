@@ -53,6 +53,7 @@ object Backup {
                     put("paidAt", h.paidAt)
                     if (h.amount != null) put("amount", h.amount)
                     put("currency", h.currency)
+                    put("kind", h.kind)
                 })
             }
         })
@@ -114,6 +115,7 @@ object Backup {
                 paidAt = o.optLong("paidAt", System.currentTimeMillis()),
                 amount = if (o.has("amount")) o.getDouble("amount") else null,
                 currency = o.optString("currency", ""),
+                kind = o.optString("kind", ""),
             )
         }
         return Parsed(items, history)

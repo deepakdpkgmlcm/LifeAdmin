@@ -18,7 +18,10 @@ import com.lifeadmin.app.reminders.ItemOps
 import com.lifeadmin.app.reminders.Notifier
 import com.lifeadmin.app.reminders.ReminderScheduler
 import com.lifeadmin.app.reminders.Schedule
+import com.lifeadmin.app.util.Format
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -49,6 +52,13 @@ data class Draft(
     val paymentMethod: String = "",
 )
 
+/** A message for the Undo bar; [restore] puts the item back as it was. */
+data class UndoEvent(
+    val message: String,
+    val restore: Item?,
+    val id: Long = System.nanoTime(),
+)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
     private val dao = db.itemDao()
@@ -67,6 +77,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun observeItem(id: Long): Flow<Item?> = dao.observe(id)
 
     fun observeHistory(itemId: Long): Flow<List<History>> = historyDao.observeForItem(itemId)
+
+    /** The latest Undo message; whichever screen is showing displays it, then clears it. */
+    val undoEvent = MutableStateFlow<UndoEvent?>(null)
+
+    fun consumeUndo(event: UndoEvent) {
+        if (undoEvent.value?.id == event.id) undoEvent.value = null
+    }
+
+    /** Items playing their "done" check animation right now. */
+    val completing = MutableStateFlow<Set<Long>>(emptySet())
+
+    /**
+     * Done / Paid / Renewed with feedback: the card shows a check for a moment, then the
+     * item moves to its next date (repeating) or to the Done tab (one-off), with Undo.
+     */
+    fun completeWithFeedback(item: Item) {
+        if (item.id in completing.value) return
+        completing.value = completing.value + item.id
+        viewModelScope.launch {
+            delay(COMPLETE_ANIMATION_MS)
+            val c = ItemOps.complete(ctx, item)
+            lastCompletionHistory[item.id] = c.history.id
+            completing.value = completing.value - item.id
+            val next = c.next
+            val message = if (next != null) {
+                "${item.kind.doneVerb} · next " + Format.shortDate(next.toLocalDate()) +
+                    (if (item.dueMinute != null) " " + Format.time(next) else "")
+            } else {
+                "${item.kind.doneVerb} · moved to Done"
+            }
+            undoEvent.value = UndoEvent(message, item)
+        }
+    }
 
     /** History rows created by the last completion of each item, so Undo can remove them. */
     private val lastCompletionHistory = mutableMapOf<Long, Long>()
@@ -123,9 +166,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Swipe-to-delete. Pair with [restore] for Undo. */
+    /** Swipe-to-delete, with Undo. */
     fun deleteItem(item: Item) {
-        viewModelScope.launch { deleteNow(item) }
+        viewModelScope.launch {
+            deleteNow(item)
+            undoEvent.value = UndoEvent("Deleted ${item.title}", item)
+        }
     }
 
     private suspend fun deleteNow(item: Item) {
@@ -200,3 +246,5 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return parsed.items.size
     }
 }
+
+private const val COMPLETE_ANIMATION_MS = 750L

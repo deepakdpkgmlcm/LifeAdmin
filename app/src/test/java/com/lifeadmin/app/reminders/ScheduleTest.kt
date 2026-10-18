@@ -147,6 +147,7 @@ class ScheduleTest {
         assertFalse(c.updated.done)
         assertEquals(d.plusMonths(1).toEpochDay(), c.updated.dueEpochDay)
         assertEquals(35.0, c.history.amount!!, 0.0)
+        assertEquals("PAYMENT", c.history.kind)
         // Reminders record completion without an amount.
         assertNull(Schedule.complete(item(d, amount = 5.0), 1000L, nine).history.amount)
     }

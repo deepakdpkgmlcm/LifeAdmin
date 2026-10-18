@@ -160,6 +160,7 @@ object ItemOps {
                     dueEpochDay = Instant.ofEpochMilli(occurrenceMillis).atZone(zone).toLocalDate().toEpochDay(),
                     amount = if (item.kind == Kind.REMINDER) null else item.amount,
                     currency = item.currency,
+                    kind = item.kind.name,
                 )
             )
             return
