@@ -26,6 +26,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_ONBOARDED, false)
         set(value) = prefs.edit().putBoolean(KEY_ONBOARDED, value).apply()
 
+    /** True once the long first-launch animation has played. */
+    var splashSeen: Boolean
+        get() = prefs.getBoolean("splash_seen", false)
+        set(value) = prefs.edit().putBoolean("splash_seen", value).apply()
+
     private fun defaultCurrency(): String =
         try {
             Currency.getInstance(Locale.getDefault()).currencyCode

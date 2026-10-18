@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Item::class, History::class], version = 2, exportSchema = false)
+@Database(entities = [Item::class, History::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
     abstract fun historyDao(): HistoryDao
@@ -32,6 +32,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 -> v3: reminder features (kinds, times, flexible repeats, alarms, done state). */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val columns = listOf(
+                    "`kind` TEXT NOT NULL DEFAULT 'REMINDER'",
+                    "`dueMinute` INTEGER",
+                    "`repeatEvery` INTEGER NOT NULL DEFAULT 1",
+                    "`repeatDays` TEXT NOT NULL DEFAULT ''",
+                    "`repeatLimit` INTEGER",
+                    "`repeatUntilEpochDay` INTEGER",
+                    "`alertOffsets` TEXT NOT NULL DEFAULT ''",
+                    "`alertStyle` TEXT NOT NULL DEFAULT 'NOTIFICATION'",
+                    "`nagEveryMin` INTEGER NOT NULL DEFAULT 0",
+                    "`nagCount` INTEGER NOT NULL DEFAULT 0",
+                    "`lastFiredAt` INTEGER NOT NULL DEFAULT 0",
+                    "`done` INTEGER NOT NULL DEFAULT 0",
+                    "`doneAt` INTEGER",
+                    "`snoozedUntil` INTEGER",
+                )
+                columns.forEach { db.execSQL("ALTER TABLE `items` ADD COLUMN $it") }
+                db.execSQL(
+                    "UPDATE `items` SET `kind` = CASE " +
+                        "WHEN `category` IN ('SUBSCRIPTION','BILL','INSURANCE') THEN 'PAYMENT' " +
+                        "WHEN `category` IN ('DOCUMENT','VEHICLE','WARRANTY') THEN 'RENEWAL' " +
+                        "ELSE 'REMINDER' END"
+                )
+                // Existing items count as "already alerted up to now", so the upgrade
+                // doesn't fire a burst of old reminders.
+                db.execSQL("UPDATE `items` SET `lastFiredAt` = CAST(strftime('%s','now') AS INTEGER) * 1000")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -42,7 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

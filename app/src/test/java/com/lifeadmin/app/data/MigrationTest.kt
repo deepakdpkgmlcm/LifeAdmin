@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -50,6 +51,26 @@ class MigrationTest {
         assertEquals(1, items.size)
         assertEquals("Passport", items[0].title)
         assertEquals(Category.DOCUMENT, items[0].category)
+        // v3 columns: kind derived from category, everything else defaulted.
+        assertEquals(Kind.RENEWAL, items[0].kind)
+        assertEquals(null, items[0].dueMinute)
+        assertEquals(1, items[0].repeatEvery)
+        assertEquals(AlertStyle.NOTIFICATION, items[0].alertStyle)
+        assertEquals(false, items[0].done)
+        assertTrue(items[0].lastFiredAt > 0)
+
+        // New-style items save and load.
+        db.itemDao().insert(
+            Item(
+                title = "Stretch", category = Category.HEALTH, dueEpochDay = 20000, dueMinute = 600,
+                cycle = Cycle.HOURS, repeatEvery = 2, alertOffsets = "0,5", alertStyle = AlertStyle.ALARM,
+                nagEveryMin = 5, nagCount = 3
+            )
+        )
+        val stretch = db.itemDao().getAll().first { it.title == "Stretch" }
+        assertEquals(Kind.REMINDER, stretch.kind)
+        assertEquals(AlertStyle.ALARM, stretch.alertStyle)
+        assertEquals(Cycle.HOURS, stretch.cycle)
 
         db.historyDao().insert(
             History(

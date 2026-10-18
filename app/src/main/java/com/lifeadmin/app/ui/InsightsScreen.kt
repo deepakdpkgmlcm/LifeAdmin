@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeadmin.app.data.Category
 import com.lifeadmin.app.data.Cycle
 import com.lifeadmin.app.data.Item
+import com.lifeadmin.app.data.Kind
 import com.lifeadmin.app.data.daysLeft
 import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
@@ -54,7 +55,7 @@ fun InsightsScreen(
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
-    val all = items.orEmpty()
+    val all = items.orEmpty().filter { !it.done && it.kind != Kind.REMINDER }
     val today = remember { LocalDate.now() }
     val extra = Extra.colors
     val currency = vm.settings.currency
@@ -62,10 +63,10 @@ fun InsightsScreen(
     val otherCurrencies = all.count { it.amount != null && !it.currency.equals(currency, ignoreCase = true) }
 
     val recurring = inCurrency.filter { it.cycle != Cycle.NONE }
-    val perMonth = recurring.sumOf { it.amount!! * it.cycle.perMonth }
+    val perMonth = recurring.sumOf { it.amount!! * it.cycle.perMonthFor(it.repeatEvery) }
     val byCategory: List<Pair<Category, Double>> = recurring
         .groupBy { it.category }
-        .map { (c, list) -> c to list.sumOf { it.amount!! * it.cycle.perMonth } }
+        .map { (c, list) -> c to list.sumOf { it.amount!! * it.cycle.perMonthFor(it.repeatEvery) } }
         .sortedByDescending { it.second }
     val maxCategory = byCategory.maxOfOrNull { it.second } ?: 0.0
 
@@ -82,7 +83,7 @@ fun InsightsScreen(
         .sumOf { it.amount!! }
 
     val biggest = inCurrency
-        .sortedByDescending { if (it.cycle == Cycle.NONE) it.amount!! else it.amount!! * it.cycle.perMonth * 12 }
+        .sortedByDescending { if (it.cycle == Cycle.NONE) it.amount!! else it.amount!! * it.cycle.perMonthFor(it.repeatEvery) * 12 }
         .take(3)
 
     fun money(v: Double) = Format.money(Math.round(v).toDouble(), currency)
@@ -181,7 +182,7 @@ fun InsightsScreen(
 
             if (all.isEmpty()) {
                 item(key = "empty") {
-                    Text("Add a few items with amounts and your spending summary will appear here.", color = extra.muted)
+                    Text("Add payments or renewals with amounts and your spending summary will appear here.", color = extra.muted)
                 }
             }
         }
@@ -189,7 +190,7 @@ fun InsightsScreen(
 }
 
 private fun yearly(item: Item): Double =
-    if (item.cycle == Cycle.NONE) item.amount ?: 0.0 else (item.amount ?: 0.0) * item.cycle.perMonth * 12
+    if (item.cycle == Cycle.NONE) item.amount ?: 0.0 else (item.amount ?: 0.0) * item.cycle.perMonthFor(item.repeatEvery) * 12
 
 @Composable
 private fun MiniStat(label: String, value: String, caption: String, modifier: Modifier) {

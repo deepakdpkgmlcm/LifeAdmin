@@ -72,10 +72,13 @@ fun ItemsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var sort by rememberSaveable { mutableStateOf(Sort.DUE) }
+    var showDone by rememberSaveable { mutableStateOf(false) }
+    val doneCount = all.count { it.done }
+    val active = all.filter { it.done == showDone }
 
-    val counts = all.groupingBy { it.category }.eachCount()
+    val counts = active.groupingBy { it.category }.eachCount()
     val q = query.trim().lowercase(Locale.getDefault())
-    val shown = all
+    val shown = active
         .filter { category == null || it.category.name == category }
         .filter {
             q.isEmpty() || it.title.lowercase(Locale.getDefault()).contains(q) ||
@@ -164,14 +167,23 @@ fun ItemsScreen(
                     items(Sort.entries.toList()) { s ->
                         SortPill(s.label, sort == s) { sort = s }
                     }
+                    item {
+                        SortPill("Completed ($doneCount)", showDone) {
+                            showDone = !showDone
+                            category = null
+                        }
+                    }
                 }
             }
 
             if (shown.isEmpty()) {
                 item(key = "empty") {
                     Text(
-                        if (all.isEmpty()) "Nothing tracked yet. Tap + to add your first item."
-                        else "No items match.",
+                        when {
+                            all.isEmpty() -> "Nothing tracked yet. Tap + to add your first item."
+                            showDone -> "Nothing completed yet."
+                            else -> "No items match."
+                        },
                         color = extra.muted,
                         modifier = Modifier.padding(top = 12.dp)
                     )
@@ -186,7 +198,8 @@ fun ItemsScreen(
 }
 
 private fun yearlyCost(item: Item): Double =
-    if (item.cycle == Cycle.NONE) item.amount ?: 0.0 else (item.amount ?: 0.0) * item.cycle.perMonth * 12
+    if (item.cycle == Cycle.NONE) item.amount ?: 0.0
+    else (item.amount ?: 0.0) * item.cycle.perMonthFor(item.repeatEvery) * 12
 
 @Composable
 private fun CategoryTile(
@@ -251,14 +264,12 @@ private fun SortPill(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 fun ItemListRow(item: Item, today: LocalDate, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val extra = Extra.colors
-    val days = item.daysLeft(today)
-    val urgency = urgencyOf(days)
+    val now = java.time.LocalDateTime.now()
+    val occurrence = com.lifeadmin.app.reminders.Schedule.occurrence(item, 9 * 60)
+    val urgency = if (item.done) Urgency.LATER else itemUrgency(item, occurrence, now)
     val uc = urgency.colors()
-    val subtitle = listOfNotNull(
-        Format.shortDate(item.dueDate()),
-        item.cycle.short.takeIf { item.cycle != Cycle.NONE },
-        item.amount?.let { Format.money(it, item.currency) },
-    ).joinToString(" · ")
+    val badge = if (item.done) "Done" else Format.badge(item, occurrence, now)
+    val subtitle = Format.shortDate(item.dueDate()) + " · " + itemSubtitle(item)
 
     Surface(
         onClick = onClick,
@@ -288,7 +299,7 @@ fun ItemListRow(item: Item, today: LocalDate, onClick: () -> Unit, modifier: Mod
             }
             Spacer(Modifier.width(8.dp))
             Text(
-                Format.daysBadge(days),
+                badge,
                 color = uc.fg,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,

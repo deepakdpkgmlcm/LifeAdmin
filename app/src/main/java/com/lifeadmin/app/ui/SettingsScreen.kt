@@ -50,7 +50,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.lifeadmin.app.BuildConfig
+import com.lifeadmin.app.reminders.AlarmScheduler
 import com.lifeadmin.app.reminders.Notifier
+import android.net.Uri
+import android.os.Build
 import com.lifeadmin.app.ui.theme.Extra
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,8 +76,15 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     var testSent by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<String?>(null) }
 
+    var exactOk by remember { mutableStateOf(AlarmScheduler.canScheduleExact(context)) }
+    var fullScreenOk by remember { mutableStateOf(Notifier.canUseFullScreen(context)) }
+
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         notificationsOn = Notifier.canNotify(context)
+        val wasExact = exactOk
+        exactOk = AlarmScheduler.canScheduleExact(context)
+        fullScreenOk = Notifier.canUseFullScreen(context)
+        if (exactOk && !wasExact) vm.rescheduleAll()
     }
 
     val timeFormatter = remember { DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT) }
@@ -140,8 +150,34 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         colors = ButtonDefaults.buttonColors(containerColor = extra.ink, contentColor = extra.onInk)
                     ) { Text("Turn on notifications", fontWeight = FontWeight.Bold) }
                 }
+                PermissionRow(
+                    title = "Exact timing",
+                    ok = exactOk,
+                    okText = "On: reminders arrive on the minute",
+                    offText = "Off: alerts may be a few minutes late"
+                ) {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        context.startActivity(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+                PermissionRow(
+                    title = "Full-screen alarms",
+                    ok = fullScreenOk,
+                    okText = "On: alarms can ring over the lock screen",
+                    offText = "Off: alarms show as a loud notification"
+                ) {
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        context.startActivity(
+                            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
                 SelectField(
-                    label = "Daily reminder time",
+                    label = "Time for all-day reminders",
                     selected = hour,
                     options = (6..22).toList(),
                     optionLabel = { LocalTime.of(it, 0).format(timeFormatter) },
@@ -264,3 +300,15 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 }
 
 private const val TEST_NOTIFICATION_ID = 999_999
+
+@Composable
+private fun PermissionRow(title: String, ok: Boolean, okText: String, offText: String, onFix: () -> Unit) {
+    val extra = Extra.colors
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(if (ok) okText else offText, color = if (ok) extra.muted else extra.soon, fontSize = 12.sp)
+        }
+        if (!ok) TextButton(onClick = onFix) { Text("Allow", fontWeight = FontWeight.Bold) }
+    }
+}

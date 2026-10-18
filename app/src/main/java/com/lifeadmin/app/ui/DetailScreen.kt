@@ -66,7 +66,11 @@ import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
 import kotlinx.coroutines.launch
 import java.time.Instant
+import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.reminders.Schedule
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.time.ZoneId
 import kotlin.math.abs
 
@@ -99,8 +103,10 @@ fun DetailScreen(
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         val current = item ?: return@Scaffold
-        val days = current.daysLeft(today)
-        val urgency = urgencyOf(days)
+        val now = LocalDateTime.now()
+        val occurrence = Schedule.occurrence(current, vm.defaultMinute)
+        val days = ChronoUnit.DAYS.between(today, occurrence.toLocalDate())
+        val urgency = if (current.done) Urgency.LATER else itemUrgency(current, occurrence, now)
         val uc = urgency.colors()
 
         Column(
@@ -134,7 +140,11 @@ fun DetailScreen(
                         )
                     }
                     Spacer(Modifier.width(10.dp))
-                    Text(current.category.label, color = extra.muted, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${current.category.label} · ${current.kind.label}",
+                        color = extra.muted,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 Text(current.title, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 30.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -142,13 +152,22 @@ fun DetailScreen(
                     Spacer(Modifier.width(18.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            Format.dueSentence(current.category.dueVerb, days),
+                            when {
+                                current.done -> "Completed"
+                                current.dueMinute != null -> Format.badge(current, occurrence, now)
+                                else -> Format.dueSentence(current.category.dueVerb, days)
+                            },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = uc.fg
                         )
-                        Text(Format.date(current.dueDate()), color = extra.muted, fontSize = 14.sp)
-                        current.amount?.let {
+                        Text(
+                            Format.date(current.dueDate()) +
+                                (current.dueMinute?.let { " · " + Format.time(it) } ?: ""),
+                            color = extra.muted,
+                            fontSize = 14.sp
+                        )
+                        current.amount?.takeIf { current.kind != Kind.REMINDER }?.let {
                             Text(
                                 Format.money(it, current.currency),
                                 fontSize = 20.sp,
@@ -159,15 +178,30 @@ fun DetailScreen(
                 }
             }
 
-            if (current.cycle != Cycle.NONE) {
+            if (current.done) {
+                AppCard {
+                    Text(
+                        "Completed" + (current.doneAt?.let {
+                            " on " + Format.date(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate())
+                        } ?: ""),
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = { vm.reopen(current) }) { Text("Reopen") }
+                }
+            } else {
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val next = vm.renewItem(current)
+                        val next = vm.complete(current)
                         scope.launch {
                             snackbar.currentSnackbarData?.dismiss()
                             val r = snackbar.showSnackbar(
-                                "Paid. Next due ${Format.shortDate(next)}",
+                                if (next != null) {
+                                    "${current.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}" +
+                                        (if (current.dueMinute != null) " ${Format.time(next)}" else "")
+                                } else {
+                                    "${current.kind.doneVerb}: ${current.title}"
+                                },
                                 actionLabel = "Undo",
                                 duration = SnackbarDuration.Short
                             )
@@ -182,26 +216,34 @@ fun DetailScreen(
                 ) {
                     Icon(Icons.Filled.Check, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Mark as paid", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(current.kind.doneLabel, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
             SectionLabel("Details", extra.muted)
             AppCard {
-                InfoRow("Repeats", current.cycle.label)
+                InfoRow("Time", current.dueMinute?.let { Format.time(it) } ?: "All day")
+                InfoRow("Repeats", Format.repeatText(current))
                 if (current.cycle != Cycle.NONE) {
-                    InfoRow("Renews automatically", if (current.autoRenew) "Yes" else "No")
+                    InfoRow("Moves on automatically", if (current.autoRenew) "Yes" else "No")
                 }
-                current.amount?.let { amount ->
+                if (current.kind != Kind.REMINDER) current.amount?.let { amount ->
                     InfoRow("Amount", Format.money(amount, current.currency))
                     if (current.cycle != Cycle.NONE) {
                         InfoRow(
                             "Per year",
-                            Format.money(Math.round(amount * current.cycle.perMonth * 12).toDouble(), current.currency)
+                            Format.money(
+                                Math.round(amount * current.cycle.perMonthFor(current.repeatEvery) * 12).toDouble(),
+                                current.currency
+                            )
                         )
                     }
                 }
-                InfoRow("Reminders", reminderSummary(current))
+                InfoRow("Alerts", Format.alertsText(current))
+                InfoRow("Style", current.alertStyle.label)
+                if (current.nagEveryMin > 0 && current.nagCount > 0) {
+                    InfoRow("Repeat alert", "Every ${current.nagEveryMin} min, ${current.nagCount}×")
+                }
                 InfoRow(
                     "Added",
                     Format.date(Instant.ofEpochMilli(current.createdAt).atZone(ZoneId.systemDefault()).toLocalDate())
@@ -213,12 +255,12 @@ fun DetailScreen(
                 AppCard { Text(current.notes, fontSize = 15.sp, lineHeight = 22.sp) }
             }
 
-            SectionLabel("Payment history", extra.muted)
+            SectionLabel(if (current.kind == Kind.PAYMENT) "Payment history" else "History", extra.muted)
             AppCard {
                 if (history.isEmpty()) {
                     Text(
                         if (current.cycle != Cycle.NONE) {
-                            "Each time you mark this as paid, it's recorded here."
+                            "Each time you mark this as ${current.kind.doneVerb.lowercase()}, it's recorded here."
                         } else {
                             "Nothing recorded yet."
                         },
@@ -236,7 +278,11 @@ fun DetailScreen(
                                 color = extra.muted,
                                 modifier = Modifier.width(96.dp)
                             )
-                            Text("Paid", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(
+                                if (h.amount != null) "Paid" else current.kind.doneVerb,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
                             h.amount?.let { Text(Format.money(it, h.currency), fontWeight = FontWeight.Bold) }
                         }
                     }
@@ -294,6 +340,8 @@ private fun CountdownRing(item: Item, days: Long, urgency: Urgency) {
     val extra = Extra.colors
     val uc = urgency.colors()
     val window = when (item.cycle) {
+        Cycle.MINUTES, Cycle.HOURS -> 1.0
+        Cycle.DAILY -> 1.0 * item.repeatEvery.coerceAtLeast(1)
         Cycle.WEEKLY -> 7.0
         Cycle.MONTHLY -> 30.0
         Cycle.QUARTERLY -> 91.0

@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** Plain JSON backup of everything the app stores, so people can move phones or keep a copy. */
 object Backup {
-    private const val FORMAT = 1
+    private const val FORMAT = 2
 
     fun toJson(items: List<Item>, history: List<History>): String {
         val root = JSONObject()
@@ -26,6 +26,18 @@ object Backup {
                     put("notes", i.notes)
                     put("reminderDays", i.reminderDays)
                     put("createdAt", i.createdAt)
+                    put("kind", i.kind.name)
+                    if (i.dueMinute != null) put("dueMinute", i.dueMinute)
+                    put("repeatEvery", i.repeatEvery)
+                    put("repeatDays", i.repeatDays)
+                    if (i.repeatLimit != null) put("repeatLimit", i.repeatLimit)
+                    if (i.repeatUntilEpochDay != null) put("repeatUntilEpochDay", i.repeatUntilEpochDay)
+                    put("alertOffsets", i.alertOffsets)
+                    put("alertStyle", i.alertStyle.name)
+                    put("nagEveryMin", i.nagEveryMin)
+                    put("nagCount", i.nagCount)
+                    put("done", i.done)
+                    if (i.doneAt != null) put("doneAt", i.doneAt)
                 })
             }
         })
@@ -60,10 +72,11 @@ object Backup {
         val itemsJson = root.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsJson.length()).map { idx ->
             val o = itemsJson.getJSONObject(idx)
+            val category = enumOr(o.optString("category"), Category.OTHER)
             Item(
                 id = o.optLong("id", 0),
                 title = o.getString("title"),
-                category = enumOr(o.optString("category"), Category.OTHER),
+                category = category,
                 dueEpochDay = o.getLong("dueEpochDay"),
                 cycle = enumOr(o.optString("cycle"), Cycle.NONE),
                 autoRenew = o.optBoolean("autoRenew", false),
@@ -72,6 +85,18 @@ object Backup {
                 notes = o.optString("notes", ""),
                 reminderDays = o.optString("reminderDays", Item.DEFAULT_REMINDERS),
                 createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                kind = enumOr(o.optString("kind"), category.defaultKind),
+                dueMinute = if (o.has("dueMinute")) o.getInt("dueMinute") else null,
+                repeatEvery = o.optInt("repeatEvery", 1),
+                repeatDays = o.optString("repeatDays", ""),
+                repeatLimit = if (o.has("repeatLimit")) o.getInt("repeatLimit") else null,
+                repeatUntilEpochDay = if (o.has("repeatUntilEpochDay")) o.getLong("repeatUntilEpochDay") else null,
+                alertOffsets = o.optString("alertOffsets", ""),
+                alertStyle = enumOr(o.optString("alertStyle"), AlertStyle.NOTIFICATION),
+                nagEveryMin = o.optInt("nagEveryMin", 0),
+                nagCount = o.optInt("nagCount", 0),
+                done = o.optBoolean("done", false),
+                doneAt = if (o.has("doneAt")) o.getLong("doneAt") else null,
             )
         }
         val historyJson = root.optJSONArray("history") ?: JSONArray()

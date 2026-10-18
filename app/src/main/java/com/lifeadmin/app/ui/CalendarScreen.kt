@@ -77,7 +77,7 @@ fun CalendarScreen(
     bottomBar: @Composable () -> Unit,
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
-    val all = items.orEmpty()
+    val all = items.orEmpty().filterNot { it.done }
     val today = remember { LocalDate.now() }
     var monthOffset by rememberSaveable { mutableIntStateOf(0) }
     var selectedEpochDay by rememberSaveable { mutableLongStateOf(today.toEpochDay()) }
@@ -108,7 +108,7 @@ fun CalendarScreen(
     val dayItems = byDate[selected].orEmpty()
     val monthItems = all.filter { YearMonth.from(it.dueDate()) == month }
     val monthTotal = monthItems
-        .filter { it.amount != null && it.currency.equals(vm.settings.currency, ignoreCase = true) }
+        .filter { it.kind != com.lifeadmin.app.data.Kind.REMINDER && it.amount != null && it.currency.equals(vm.settings.currency, ignoreCase = true) }
         .sumOf { it.amount!! }
 
     Scaffold(
@@ -203,14 +203,19 @@ fun CalendarScreen(
                         isLast = index == dayItems.lastIndex,
                         onOpen = { onOpen(item.id) },
                         onRenew = {
-                            val next = vm.renewItem(item)
-                            undoable("${item.title}: next due ${Format.shortDate(next)}") { vm.restore(item) }
+                            val next = vm.complete(item)
+                            undoable(
+                                if (next != null) "${item.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}"
+                                else "${item.kind.doneVerb}: ${item.title}"
+                            ) { vm.restore(item) }
                         },
                         onDelete = {
                             vm.deleteItem(item)
                             undoable("Deleted ${item.title}") { vm.restore(item) }
                         },
-                        modifier = Modifier.animateItem()
+                        modifier = Modifier.animateItem(),
+                        now = java.time.LocalDateTime.now(),
+                        defaultMinute = vm.defaultMinute
                     )
                 }
             }

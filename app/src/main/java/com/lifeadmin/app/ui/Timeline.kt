@@ -69,7 +69,11 @@ import com.lifeadmin.app.data.dueDate
 import com.lifeadmin.app.ui.theme.DmMono
 import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
+import com.lifeadmin.app.data.AlertStyle
+import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.reminders.Schedule
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.TextStyle as JavaTextStyle
 import java.util.Locale
 
@@ -98,9 +102,12 @@ fun TimelineRow(
     onRenew: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    now: LocalDateTime = LocalDateTime.now(),
+    defaultMinute: Int = 9 * 60,
 ) {
-    val days = item.daysLeft(today)
-    val urgency = urgencyOf(days)
+    val occurrence = Schedule.occurrence(item, defaultMinute)
+    val urgency = itemUrgency(item, occurrence, now)
+    val badge = Format.badge(item, occurrence, now)
     val uc = urgency.colors()
     val extra = Extra.colors
     val primary = MaterialTheme.colorScheme.primary
@@ -159,7 +166,7 @@ fun TimelineRow(
         ) {
             SwipeableCard(
                 item = item,
-                days = days,
+                badge = badge,
                 urgency = urgency,
                 onOpen = onOpen,
                 onRenew = onRenew,
@@ -173,14 +180,14 @@ fun TimelineRow(
 @Composable
 private fun SwipeableCard(
     item: Item,
-    days: Long,
+    badge: String,
     urgency: Urgency,
     onOpen: () -> Unit,
     onRenew: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
-    val canRenew = item.cycle != Cycle.NONE
+    val canRenew = true
     val renew by rememberUpdatedState(onRenew)
     val delete by rememberUpdatedState(onDelete)
     val state = rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.4f })
@@ -231,7 +238,7 @@ private fun SwipeableCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Check, contentDescription = null, tint = fg)
                         Spacer(Modifier.width(6.dp))
-                        Text("Paid", color = fg, fontWeight = FontWeight.Bold)
+                        Text(item.kind.doneVerb, color = fg, fontWeight = FontWeight.Bold)
                     }
                 } else if (direction == SwipeToDismissBoxValue.EndToStart) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -243,14 +250,14 @@ private fun SwipeableCard(
             }
         }
     ) {
-        ItemCard(item = item, days = days, urgency = urgency, onOpen = onOpen, onRenew = onRenew)
+        ItemCard(item = item, badge = badge, urgency = urgency, onOpen = onOpen, onRenew = onRenew)
     }
 }
 
 @Composable
 private fun ItemCard(
     item: Item,
-    days: Long,
+    badge: String,
     urgency: Urgency,
     onOpen: () -> Unit,
     onRenew: () -> Unit,
@@ -261,10 +268,7 @@ private fun ItemCard(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
 
-    val subtitle = listOfNotNull(
-        item.cycle.short.takeIf { item.cycle != Cycle.NONE },
-        item.amount?.let { Format.money(it, item.currency) },
-    ).ifEmpty { listOf(item.category.dueVerb) }.joinToString(" · ")
+    val subtitle = itemSubtitle(item)
 
     Surface(
         onClick = onOpen,
@@ -314,7 +318,7 @@ private fun ItemCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = Format.daysBadge(days),
+                    text = badge,
                     color = uc.fg,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -325,7 +329,7 @@ private fun ItemCard(
                         .padding(horizontal = 9.dp, vertical = 5.dp)
                 )
             }
-            if (urgency == Urgency.OVERDUE && item.cycle != Cycle.NONE) {
+            if (urgency == Urgency.OVERDUE) {
                 Spacer(Modifier.height(10.dp))
                 Button(
                     onClick = onRenew,
@@ -337,7 +341,7 @@ private fun ItemCard(
                     ),
                     modifier = Modifier.height(36.dp)
                 ) {
-                    Text("Mark as paid", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(item.kind.doneLabel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -460,4 +464,22 @@ fun RollingText(value: String, content: @Composable (String) -> Unit) {
         },
         label = "rolling"
     ) { content(it) }
+}
+
+/** Overdue/soon/later, using the exact time for timed items. */
+fun itemUrgency(item: Item, occurrence: LocalDateTime, now: LocalDateTime): Urgency {
+    if (item.dueMinute != null && occurrence.isBefore(now)) return Urgency.OVERDUE
+    val days = java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), occurrence.toLocalDate())
+    return urgencyOf(days)
+}
+
+/** "10:30 · Every 2 hours · Alarm", "Monthly · $35", "Expires". */
+fun itemSubtitle(item: Item): String {
+    val parts = mutableListOf<String>()
+    item.dueMinute?.let { parts += Format.time(it) }
+    if (item.cycle != Cycle.NONE) parts += Format.repeatText(item)
+    if (item.kind != Kind.REMINDER) item.amount?.let { parts += Format.money(it, item.currency) }
+    if (item.alertStyle == AlertStyle.ALARM) parts += "Alarm"
+    if (parts.isEmpty()) parts += if (item.kind == Kind.REMINDER) item.category.label else item.category.dueVerb
+    return parts.joinToString(" · ")
 }

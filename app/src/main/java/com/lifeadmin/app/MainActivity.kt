@@ -31,6 +31,7 @@ import com.lifeadmin.app.ui.HomeScreen
 import com.lifeadmin.app.ui.InsightsScreen
 import com.lifeadmin.app.ui.ItemsScreen
 import com.lifeadmin.app.ui.SettingsScreen
+import com.lifeadmin.app.ui.SplashScreen
 import com.lifeadmin.app.ui.Tab
 import com.lifeadmin.app.ui.WelcomeScreen
 import com.lifeadmin.app.ui.theme.LifeAdminTheme
@@ -39,11 +40,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Opened from a reminder: go straight in, no launch animation.
+        val skipSplash = intent?.getBooleanExtra(EXTRA_SKIP_SPLASH, false) == true
         setContent {
             LifeAdminTheme {
-                AppRoot()
+                AppRoot(skipSplash)
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_SKIP_SPLASH = "skipSplash"
     }
 }
 
@@ -51,10 +58,11 @@ private const val TAB_ANIM = 200
 private const val PUSH_ANIM = 280
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(skipSplash: Boolean) {
     val vm: AppViewModel = viewModel()
     val nav = rememberNavController()
-    val start = remember { if (vm.settings.onboarded) Tab.HOME.route else "welcome" }
+    val afterSplash = if (vm.settings.onboarded) Tab.HOME.route else "welcome"
+    val start = remember { if (skipSplash) afterSplash else "splash" }
     val tabRoutes = remember { Tab.entries.map { it.route }.toSet() }
 
     fun goTab(tab: Tab) {
@@ -91,6 +99,17 @@ private fun AppRoot() {
             }
         }
     ) {
+        composable(
+            "splash",
+            exitTransition = { fadeOut(tween(350)) }
+        ) {
+            val firstTime = remember { !vm.settings.splashSeen }
+            SplashScreen(durationMs = if (firstTime) 4_000 else 2_000) {
+                vm.settings.splashSeen = true
+                nav.navigate(afterSplash) { popUpTo("splash") { inclusive = true } }
+            }
+        }
+
         composable("welcome") {
             WelcomeScreen(onFinish = {
                 vm.settings.onboarded = true

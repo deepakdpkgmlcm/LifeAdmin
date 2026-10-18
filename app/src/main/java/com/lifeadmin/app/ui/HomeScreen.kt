@@ -77,7 +77,11 @@ import com.lifeadmin.app.ui.theme.DmMono
 import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
 import kotlinx.coroutines.launch
+import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.reminders.Schedule
+import kotlinx.coroutines.delay
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +93,16 @@ fun HomeScreen(
     bottomBar: @Composable () -> Unit = {},
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
-    val today = remember { LocalDate.now() }
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = LocalDateTime.now()
+        }
+    }
+    val today = now.toLocalDate()
+    val defMin = vm.defaultMinute
+    fun isOverdue(item: Item) = itemUrgency(item, Schedule.occurrence(item, defMin), now) == Urgency.OVERDUE
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedDay = selectedEpochDay?.let { LocalDate.ofEpochDay(it) }
@@ -118,8 +131,14 @@ fun HomeScreen(
         showUndo("Deleted ${item.title}") { vm.restore(item) }
     }
     val onRenew: (Item) -> Unit = { item ->
-        val next = vm.renewItem(item)
-        showUndo("${item.title}: next due ${Format.shortDate(next)}") { vm.restore(item) }
+        val next = vm.complete(item)
+        val message = if (next != null) {
+            "${item.kind.doneVerb}. Next: ${Format.shortDate(next.toLocalDate())}" +
+                (if (item.dueMinute != null) " ${Format.time(next)}" else "")
+        } else {
+            "${item.kind.doneVerb}: ${item.title}"
+        }
+        showUndo(message) { vm.restore(item) }
     }
 
     NotificationPermissionRequest(vm.settings, trigger = !items.isNullOrEmpty())
@@ -142,7 +161,7 @@ fun HomeScreen(
             }
         }
     ) { padding ->
-        val all = items
+        val all = items?.filterNot { it.done }
         when {
             all == null -> Unit // first load
             all.isEmpty() -> EmptyState(today, Modifier.padding(padding), onAdd, onSettings)
@@ -153,12 +172,15 @@ fun HomeScreen(
                 val busyDays = all.map { it.dueDate() }
                     .filter { !it.isBefore(today) && !it.isAfter(weekEnd) }
                     .toSet()
-                val overdueCount = all.count { it.daysLeft(today) < 0 }
-                val weekCount = all.count { it.daysLeft(today) in 0..7 }
+                val overdueCount = all.count { isOverdue(it) }
+                val weekCount = all.count { !isOverdue(it) && it.daysLeft(today) in 0..7 }
                 val currency = vm.settings.currency
                 val monthly = all
-                    .filter { it.cycle != Cycle.NONE && it.amount != null && it.currency.equals(currency, ignoreCase = true) }
-                    .sumOf { it.amount!! * it.cycle.perMonth }
+                    .filter {
+                        it.kind != Kind.REMINDER && it.cycle != Cycle.NONE && it.amount != null &&
+                            it.currency.equals(currency, ignoreCase = true)
+                    }
+                    .sumOf { it.amount!! * it.cycle.perMonthFor(it.repeatEvery) }
                 val perMonth = if (monthly > 0) Format.money(Math.round(monthly).toDouble(), currency) else "—"
 
                 LazyColumn(
@@ -243,24 +265,24 @@ fun HomeScreen(
                                 )
                             }
                         } else {
-                            timeline("day", null, extra.muted, dayItems, today, onOpen, onRenew, onDelete)
+                            timeline("day", null, extra.muted, dayItems, today, now, defMin, onOpen, onRenew, onDelete)
                         }
                     } else {
                         timeline(
                             "overdue", "Overdue", extra.overdue,
-                            shown.filter { it.daysLeft(today) < 0 }, today, onOpen, onRenew, onDelete
+                            shown.filter { isOverdue(it) }, today, now, defMin, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "week", "Next 7 days", extra.muted,
-                            shown.filter { it.daysLeft(today) in 0..7 }, today, onOpen, onRenew, onDelete
+                            shown.filter { !isOverdue(it) && it.daysLeft(today) in 0..7 }, today, now, defMin, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "month", "This month", extra.muted,
-                            shown.filter { it.daysLeft(today) in 8..30 }, today, onOpen, onRenew, onDelete
+                            shown.filter { it.daysLeft(today) in 8..30 }, today, now, defMin, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "later", "Later", extra.muted,
-                            shown.filter { it.daysLeft(today) > 30 }, today, onOpen, onRenew, onDelete
+                            shown.filter { it.daysLeft(today) > 30 }, today, now, defMin, onOpen, onRenew, onDelete
                         )
                     }
                 }
@@ -276,6 +298,8 @@ private fun LazyListScope.timeline(
     labelColor: Color,
     list: List<Item>,
     today: LocalDate,
+    now: LocalDateTime,
+    defaultMinute: Int,
     onOpen: (Long) -> Unit,
     onRenew: (Item) -> Unit,
     onDelete: (Item) -> Unit,
@@ -295,7 +319,9 @@ private fun LazyListScope.timeline(
             onOpen = { onOpen(item.id) },
             onRenew = { onRenew(item) },
             onDelete = { onDelete(item) },
-            modifier = Modifier.animateItem()
+            modifier = Modifier.animateItem(),
+            now = now,
+            defaultMinute = defaultMinute
         )
     }
 }
@@ -365,8 +391,8 @@ private fun EmptyState(today: LocalDate, modifier: Modifier, onAdd: () -> Unit, 
             Text("Nothing to remember yet", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Add passports, subscriptions, bills, insurance and warranties. " +
-                    "You'll get a reminder before anything expires or renews.",
+                "Add reminders, tasks, bills, subscriptions and documents. " +
+                    "Set a time, repeat it every few minutes or every year, and get a nudge or a full alarm.",
                 fontSize = 14.sp,
                 color = extra.muted,
                 textAlign = TextAlign.Center

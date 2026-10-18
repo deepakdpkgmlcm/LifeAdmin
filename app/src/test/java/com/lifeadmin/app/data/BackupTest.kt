@@ -22,6 +22,12 @@ class BackupTest {
                 notes = "Family plan", reminderDays = "7,1", createdAt = 123L
             ),
             Item(id = 9, title = "Passport", category = Category.DOCUMENT, dueEpochDay = 20941, createdAt = 456L),
+            Item(
+                id = 11, title = "Stand up", category = Category.HEALTH, dueEpochDay = 20750, createdAt = 789L,
+                dueMinute = 615, cycle = Cycle.WEEKLY, repeatEvery = 2, repeatDays = "1,3,5", repeatLimit = 4,
+                repeatUntilEpochDay = 21000, alertOffsets = "0,10", alertStyle = AlertStyle.ALARM,
+                nagEveryMin = 5, nagCount = 3, done = true, doneAt = 5L
+            ),
         )
         val history = listOf(
             History(itemId = 7, itemTitle = "Netflix", category = Category.SUBSCRIPTION,

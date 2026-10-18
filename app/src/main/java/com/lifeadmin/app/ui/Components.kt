@@ -14,6 +14,10 @@ import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Work
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -35,6 +39,10 @@ import com.lifeadmin.app.data.Category
 import com.lifeadmin.app.ui.theme.Extra
 
 fun Category.icon(): ImageVector = when (this) {
+    Category.TASK -> Icons.Outlined.TaskAlt
+    Category.PERSONAL -> Icons.Outlined.Person
+    Category.WORK -> Icons.Outlined.Work
+    Category.HEALTH -> Icons.Outlined.FavoriteBorder
     Category.DOCUMENT -> Icons.Outlined.Badge
     Category.SUBSCRIPTION -> Icons.Outlined.Subscriptions
     Category.BILL -> Icons.Outlined.Receipt
