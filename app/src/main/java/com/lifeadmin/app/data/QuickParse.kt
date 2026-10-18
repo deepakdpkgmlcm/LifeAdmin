@@ -57,7 +57,7 @@ object QuickParse {
 
         /** Finds [rx] and blanks the match out of both copies (keeps positions aligned). */
         fun take(rx: Regex): MatchResult? {
-            val m = rx.find(lower) ?: return null
+            val m = rx.find(lower.toString()) ?: return null
             for (i in m.range) {
                 lower.setCharAt(i, ' ')
                 original.setCharAt(i, ' ')
