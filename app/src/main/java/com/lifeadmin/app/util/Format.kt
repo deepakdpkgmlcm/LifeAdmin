@@ -25,13 +25,34 @@ object Format {
         }
     }
 
-    /** Short badge text, e.g. "Today", "In 5 days", "3 days late". */
+    /** Short badge text, e.g. "Today", "In 5 days", "3 days late", "6 months". */
     fun daysBadge(days: Long): String = when {
         days < -1 -> "${-days} days late"
         days == -1L -> "1 day late"
         days == 0L -> "Today"
         days == 1L -> "Tomorrow"
-        else -> "In $days days"
+        days < 60 -> "In $days days"
+        days < 730 -> "${Math.round(days / 30.44)} months"
+        else -> "${days / 365} years"
+    }
+
+    private val shortDateFmt = DateTimeFormatter.ofPattern("EEE, d MMM")
+    private val headerDateFmt = DateTimeFormatter.ofPattern("EEE, d MMMM")
+    private val monthShortFmt = DateTimeFormatter.ofPattern("MMM")
+
+    /** "Mon, 19 Oct" */
+    fun shortDate(date: LocalDate): String = date.format(shortDateFmt)
+
+    /** "SUN, 18 OCTOBER" for the home header. */
+    fun headerDate(date: LocalDate): String = date.format(headerDateFmt).uppercase(Locale.getDefault())
+
+    /**
+     * Two-line timeline label: "16\nOCT" this year, "03 MAY\n2027" for other years.
+     */
+    fun timelineDate(date: LocalDate, today: LocalDate): String {
+        val month = date.format(monthShortFmt).uppercase(Locale.getDefault()).take(3)
+        val day = date.dayOfMonth.toString().padStart(2, '0')
+        return if (date.year == today.year) "$day\n$month" else "$day $month\n${date.year}"
     }
 
     /** Sentence fragment for reminders, e.g. "Expires in 7 days". */

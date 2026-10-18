@@ -5,7 +5,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,48 +18,65 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.EventAvailable
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeadmin.app.data.AppSettings
 import com.lifeadmin.app.data.Cycle
 import com.lifeadmin.app.data.Item
 import com.lifeadmin.app.data.daysLeft
+import com.lifeadmin.app.data.dueDate
+import com.lifeadmin.app.ui.theme.DmMono
+import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,188 +90,324 @@ fun HomeScreen(
     val items by vm.items.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val selectedDay = selectedEpochDay?.let { LocalDate.ofEpochDay(it) }
+
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val haptic = LocalHapticFeedback.current
+    val extra = Extra.colors
+    val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex < 2 } }
+
+    fun showUndo(message: String, undo: () -> Unit) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(
+                message = message,
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) undo()
+        }
+    }
+
+    val onDelete: (Item) -> Unit = { item ->
+        vm.deleteItem(item)
+        showUndo("Deleted ${item.title}") { vm.restore(item) }
+    }
+    val onRenew: (Item) -> Unit = { item ->
+        val next = vm.renewItem(item)
+        showUndo("${item.title}: next due ${Format.shortDate(next)}") { vm.restore(item) }
+    }
 
     NotificationPermissionRequest(vm.settings, trigger = !items.isNullOrEmpty())
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("LifeAdmin", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
-                    }
-                }
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             if (!items.isNullOrEmpty()) {
                 ExtendedFloatingActionButton(
                     onClick = onAdd,
+                    expanded = fabExpanded,
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("Add") }
+                    text = { Text("Add", fontWeight = FontWeight.Bold) },
+                    containerColor = extra.ink,
+                    contentColor = extra.onInk,
+                    shape = RoundedCornerShape(28.dp)
                 )
             }
         }
     ) { padding ->
         val all = items
         when {
-            all == null -> Unit // still loading
-            all.isEmpty() -> EmptyState(Modifier.padding(padding), onAdd)
+            all == null -> Unit // first load
+            all.isEmpty() -> EmptyState(today, Modifier.padding(padding), onAdd, onSettings)
             else -> {
                 val shown = all.filter { filter == null || it.category.name == filter }
                 val categories = all.map { it.category }.distinct().sortedBy { it.ordinal }
+                val weekEnd = today.plusDays(6)
+                val busyDays = all.map { it.dueDate() }
+                    .filter { !it.isBefore(today) && !it.isAfter(weekEnd) }
+                    .toSet()
+                val overdueCount = all.count { it.daysLeft(today) < 0 }
+                val weekCount = all.count { it.daysLeft(today) in 0..7 }
+                val currency = vm.settings.currency
+                val monthly = all
+                    .filter { it.cycle != Cycle.NONE && it.amount != null && it.currency.equals(currency, ignoreCase = true) }
+                    .sumOf { it.amount!! * it.cycle.perMonth }
+                val perMonth = if (monthly > 0) Format.money(Math.round(monthly).toDouble(), currency) else "—"
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = padding.calculateTopPadding() + 4.dp,
-                        bottom = padding.calculateBottomPadding() + 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = padding.calculateTopPadding() + 20.dp,
+                        bottom = padding.calculateBottomPadding() + 100.dp
+                    )
                 ) {
-                    item(key = "summary") { SummaryRow(all, today, vm.settings.currency) }
+                    item(key = "header") { Header(today, onSettings) }
+
+                    item(key = "summary") {
+                        SummaryCard(
+                            overdue = overdueCount,
+                            nextWeek = weekCount,
+                            perMonth = perMonth,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+
+                    item(key = "week") {
+                        WeekStrip(
+                            today = today,
+                            selected = selectedDay,
+                            busyDays = busyDays,
+                            onSelect = { day ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedEpochDay = if (day == selectedDay) null else day.toEpochDay()
+                            },
+                            modifier = Modifier.padding(top = 14.dp)
+                        )
+                    }
 
                     if (categories.size > 1) {
                         item(key = "filters") {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 12.dp)
+                            ) {
                                 item {
-                                    FilterChip(
-                                        selected = filter == null,
-                                        onClick = { filter = null },
-                                        label = { Text("All") }
-                                    )
+                                    CategoryChip("All", filter == null) { filter = null }
                                 }
-                                items(categories) { category ->
-                                    FilterChip(
-                                        selected = filter == category.name,
-                                        onClick = {
-                                            filter = if (filter == category.name) null else category.name
-                                        },
-                                        label = { Text(category.label) },
-                                        leadingIcon = {
-                                            Icon(category.icon(), null, Modifier.size(18.dp))
-                                        }
-                                    )
+                                items(categories) { c ->
+                                    CategoryChip(c.label, filter == c.name) {
+                                        filter = if (filter == c.name) null else c.name
+                                    }
                                 }
                             }
                         }
                     }
 
-                    section("Overdue", shown.filter { it.daysLeft(today) < 0 }, today, onOpen)
-                    section("Next 7 days", shown.filter { it.daysLeft(today) in 0..7 }, today, onOpen)
-                    section("This month", shown.filter { it.daysLeft(today) in 8..30 }, today, onOpen)
-                    section("Later", shown.filter { it.daysLeft(today) > 30 }, today, onOpen)
+                    item(key = "spacer") { Spacer(Modifier.height(6.dp)) }
+
+                    if (selectedDay != null) {
+                        item(key = "dayHeader") {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(start = TimelineGutter)
+                                    .animateItem()
+                            ) {
+                                SectionLabel(
+                                    "Due ${Format.shortDate(selectedDay)}",
+                                    extra.ink,
+                                    Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { selectedEpochDay = null }) { Text("Show all") }
+                            }
+                        }
+                        val dayItems = shown.filter { it.dueDate() == selectedDay }
+                        if (dayItems.isEmpty()) {
+                            item(key = "dayEmpty") {
+                                Text(
+                                    "Nothing due on this day.",
+                                    color = extra.muted,
+                                    modifier = Modifier
+                                        .padding(start = TimelineGutter, top = 4.dp)
+                                        .animateItem()
+                                )
+                            }
+                        } else {
+                            timeline("day", null, extra.muted, dayItems, today, onOpen, onRenew, onDelete)
+                        }
+                    } else {
+                        timeline(
+                            "overdue", "Overdue", extra.overdue,
+                            shown.filter { it.daysLeft(today) < 0 }, today, onOpen, onRenew, onDelete
+                        )
+                        timeline(
+                            "week", "Next 7 days", extra.muted,
+                            shown.filter { it.daysLeft(today) in 0..7 }, today, onOpen, onRenew, onDelete
+                        )
+                        timeline(
+                            "month", "This month", extra.muted,
+                            shown.filter { it.daysLeft(today) in 8..30 }, today, onOpen, onRenew, onDelete
+                        )
+                        timeline(
+                            "later", "Later", extra.muted,
+                            shown.filter { it.daysLeft(today) > 30 }, today, onOpen, onRenew, onDelete
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private fun LazyListScope.section(
-    title: String,
+/** Adds one labelled group of timeline rows to the list. */
+private fun LazyListScope.timeline(
+    key: String,
+    label: String?,
+    labelColor: Color,
     list: List<Item>,
     today: LocalDate,
     onOpen: (Long) -> Unit,
+    onRenew: (Item) -> Unit,
+    onDelete: (Item) -> Unit,
 ) {
     if (list.isEmpty()) return
-    item(key = "header_$title") { SectionHeader(title, list.size) }
-    items(list, key = { it.id }) { item ->
-        ItemCard(item = item, today = today, onClick = { onOpen(item.id) })
-    }
-}
-
-@Composable
-private fun SummaryRow(items: List<Item>, today: LocalDate, currency: String) {
-    val overdue = items.count { it.daysLeft(today) < 0 }
-    val nextWeek = items.count { it.daysLeft(today) in 0..7 }
-    val monthly = items
-        .filter { it.cycle != Cycle.NONE && it.amount != null && it.currency.equals(currency, ignoreCase = true) }
-        .sumOf { it.amount!! * it.cycle.perMonth }
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        StatCard(
-            value = overdue.toString(),
-            label = "Overdue",
-            highlight = if (overdue > 0) MaterialTheme.colorScheme.error else null,
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            value = nextWeek.toString(),
-            label = "Next 7 days",
-            highlight = null,
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            value = if (monthly > 0) Format.money(Math.round(monthly).toDouble(), currency) else "—",
-            label = "Per month",
-            highlight = null,
-            modifier = Modifier.weight(1.2f)
-        )
-    }
-}
-
-@Composable
-private fun StatCard(value: String, label: String, highlight: Color?, modifier: Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = highlight ?: MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
+    if (label != null) {
+        item(key = "label_$key") {
+            SectionLabel(label, labelColor, Modifier.padding(start = TimelineGutter).animateItem())
         }
     }
+    itemsIndexed(list, key = { _, item -> item.id }) { index, item ->
+        TimelineRow(
+            item = item,
+            today = today,
+            isFirst = index == 0,
+            isLast = index == list.lastIndex,
+            onOpen = { onOpen(item.id) },
+            onRenew = { onRenew(item) },
+            onDelete = { onDelete(item) },
+            modifier = Modifier.animateItem()
+        )
+    }
 }
 
 @Composable
-private fun EmptyState(modifier: Modifier, onAdd: () -> Unit) {
+private fun Header(today: LocalDate, onSettings: () -> Unit) {
+    val extra = Extra.colors
+    Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                Format.headerDate(today),
+                fontFamily = DmMono,
+                fontSize = 12.sp,
+                letterSpacing = 0.7.sp,
+                color = extra.muted
+            )
+            Spacer(Modifier.height(4.dp))
+            Text("Coming up", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
+        }
+        SettingsButton(onSettings)
+    }
+}
+
+@Composable
+private fun SettingsButton(onClick: () -> Unit) {
+    val extra = Extra.colors
+    val shape = RoundedCornerShape(14.dp)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(44.dp)
+            .clip(shape)
+            .background(extra.card)
+            .border(1.dp, extra.line, shape)
+    ) {
+        Icon(Icons.Outlined.Tune, contentDescription = "Settings", tint = extra.ink)
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val extra = Extra.colors
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontWeight = FontWeight.SemiBold) },
+        shape = RoundedCornerShape(18.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = extra.card,
+            labelColor = extra.ink,
+            selectedContainerColor = extra.ink,
+            selectedLabelColor = extra.onInk
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = extra.line,
+            selectedBorderColor = extra.ink
+        )
+    )
+}
+
+@Composable
+private fun EmptyState(today: LocalDate, modifier: Modifier, onAdd: () -> Unit, onSettings: () -> Unit) {
+    val extra = Extra.colors
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Icon(
-            Icons.Outlined.EventAvailable,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(72.dp)
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Nothing to remember yet",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Add passports, subscriptions, bills, insurance and warranties. " +
-                "You'll get a reminder before anything expires or renews.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onAdd) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-            Spacer(Modifier.size(8.dp))
-            Text("Add your first item")
+        Header(today, onSettings)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(84.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(extra.laterBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.EventAvailable,
+                    contentDescription = null,
+                    tint = extra.later,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Nothing to remember yet", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Add passports, subscriptions, bills, insurance and warranties. " +
+                    "You'll get a reminder before anything expires or renews.",
+                fontSize = 14.sp,
+                color = extra.muted,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = onAdd,
+                shape = RoundedCornerShape(28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = extra.ink, contentColor = extra.onInk),
+                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add your first item", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

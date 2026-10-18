@@ -67,6 +67,14 @@ class ReminderEngineTest {
     }
 
     @Test
+    fun monthEndStaysAtMonthEnd() {
+        val feb = Cycle.MONTHLY.next(LocalDate.of(2027, 1, 31))
+        assertEquals(LocalDate.of(2027, 2, 28), feb)
+        assertEquals(LocalDate.of(2027, 3, 31), Cycle.MONTHLY.next(feb))
+        assertEquals(LocalDate.of(2027, 2, 15), Cycle.MONTHLY.next(LocalDate.of(2027, 1, 15)))
+    }
+
+    @Test
     fun nonAutoRenewStaysOverdue() {
         val bill = item(today.minusDays(3), cycle = Cycle.MONTHLY, autoRenew = false)
         assertSame(bill, ReminderEngine.rolledForward(bill, today))

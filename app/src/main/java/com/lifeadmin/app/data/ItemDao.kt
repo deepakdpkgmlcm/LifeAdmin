@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -23,6 +24,9 @@ interface ItemDao {
 
     @Update
     suspend fun update(item: Item)
+
+    @Upsert
+    suspend fun upsert(item: Item)
 
     @Delete
     suspend fun delete(item: Item)

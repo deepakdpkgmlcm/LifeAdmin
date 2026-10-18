@@ -23,6 +23,10 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import com.lifeadmin.app.ui.theme.Extra
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -303,16 +307,29 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                         vm.markRenewed(itemId)
                         onDone()
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
                 ) {
                     Icon(Icons.Outlined.Autorenew, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Mark as paid / renewed (next: ${Format.date(cycle.next(dueDate))})")
+                    Text("Mark as paid · next ${Format.shortDate(cycle.next(dueDate))}")
                 }
             }
 
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Save")
+            Button(
+                onClick = { save() },
+                shape = RoundedCornerShape(28.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Extra.colors.ink,
+                    contentColor = Extra.colors.onInk
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Text("Save", fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(24.dp))
         }

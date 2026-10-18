@@ -35,9 +35,19 @@ enum class Cycle(val label: String, val short: String) {
     fun next(date: LocalDate): LocalDate = when (this) {
         NONE -> date
         WEEKLY -> date.plusWeeks(1)
-        MONTHLY -> date.plusMonths(1)
-        QUARTERLY -> date.plusMonths(3)
+        MONTHLY -> addMonths(date, 1)
+        QUARTERLY -> addMonths(date, 3)
         YEARLY -> date.plusYears(1)
+    }
+
+    /** Keeps month-end dates at month end (31 Jan -> 28 Feb -> 31 Mar), instead of drifting. */
+    private fun addMonths(date: LocalDate, months: Long): LocalDate {
+        val result = date.plusMonths(months)
+        return if (date.dayOfMonth == date.lengthOfMonth()) {
+            result.withDayOfMonth(result.lengthOfMonth())
+        } else {
+            result
+        }
     }
 
     /** Multiplier to convert one payment into an average monthly cost. */

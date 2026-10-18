@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /** What the edit form produces. */
 data class Draft(
@@ -98,6 +99,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Notifier.cancel(getApplication<Application>(), it.id.toInt())
             }
         }
+    }
+
+    /** Swipe-to-delete from the home screen. Pair with [restore] for Undo. */
+    fun deleteItem(item: Item) {
+        viewModelScope.launch {
+            dao.delete(item)
+            Notifier.cancel(getApplication<Application>(), item.id.toInt())
+        }
+    }
+
+    /**
+     * Swipe-to-pay / "Mark as paid" from the home screen: moves a repeating item to its
+     * next due date and returns that date. Pair with [restore] for Undo.
+     */
+    fun renewItem(item: Item): LocalDate {
+        val next = item.cycle.next(item.dueDate())
+        viewModelScope.launch {
+            dao.update(item.copy(dueEpochDay = next.toEpochDay(), lastNotifiedStage = Item.NOT_NOTIFIED))
+            Notifier.cancel(getApplication<Application>(), item.id.toInt())
+        }
+        return next
+    }
+
+    /** Puts an item back exactly as it was (Undo). */
+    fun restore(item: Item) {
+        viewModelScope.launch { dao.upsert(item) }
     }
 
     fun setReminderHour(hour: Int) {

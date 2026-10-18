@@ -1,17 +1,9 @@
 package com.lifeadmin.app.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Badge
@@ -24,32 +16,23 @@ import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lifeadmin.app.data.Category
-import com.lifeadmin.app.data.Cycle
-import com.lifeadmin.app.data.Item
-import com.lifeadmin.app.data.daysLeft
-import com.lifeadmin.app.data.dueDate
-import com.lifeadmin.app.util.Format
-import java.time.LocalDate
+import com.lifeadmin.app.ui.theme.Extra
 
 fun Category.icon(): ImageVector = when (this) {
     Category.DOCUMENT -> Icons.Outlined.Badge
@@ -62,79 +45,37 @@ fun Category.icon(): ImageVector = when (this) {
     Category.OTHER -> Icons.Outlined.Category
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ItemCard(item: Item, today: LocalDate, onClick: () -> Unit) {
-    val days = item.daysLeft(today)
-    val badgeColor = when {
-        days < 0 -> MaterialTheme.colorScheme.error
-        days <= 7 -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
-    val subtitle = listOfNotNull(
-        Format.date(item.dueDate()),
-        item.cycle.short.takeIf { item.cycle != Cycle.NONE },
-        item.amount?.let { Format.money(it, item.currency) },
-    ).joinToString(" · ")
+/** How close an item is: drives the dot, tile and pill colors. */
+enum class Urgency { OVERDUE, SOON, LATER }
 
-    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = item.category.icon(),
-                    contentDescription = item.category.label,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Surface(
-                color = badgeColor.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(50)
-            ) {
-                Text(
-                    text = Format.daysBadge(days),
-                    color = badgeColor,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
-        }
+fun urgencyOf(daysLeft: Long): Urgency = when {
+    daysLeft < 0 -> Urgency.OVERDUE
+    daysLeft <= 7 -> Urgency.SOON
+    else -> Urgency.LATER
+}
+
+data class UrgencyColors(val fg: Color, val bg: Color, val dot: Color)
+
+@Composable
+fun Urgency.colors(): UrgencyColors {
+    val c = Extra.colors
+    return when (this) {
+        Urgency.OVERDUE -> UrgencyColors(c.overdue, c.overdueBg, c.overdue)
+        Urgency.SOON -> UrgencyColors(c.soon, c.soonBg, c.soonDot)
+        Urgency.LATER -> UrgencyColors(c.later, c.laterBg, c.later)
     }
 }
 
+/** Small uppercase section label, e.g. "OVERDUE". */
 @Composable
-fun SectionHeader(title: String, count: Int) {
+fun SectionLabel(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
-        text = "$title ($count)",
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+        text = text.uppercase(),
+        color = color,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp,
+        modifier = modifier.padding(top = 10.dp, bottom = 6.dp)
     )
 }
 
@@ -156,6 +97,7 @@ fun <T> SelectField(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
+            shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth()
         )
         // Transparent layer on top so a tap anywhere opens the menu.
@@ -194,6 +136,7 @@ fun ClickableField(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { Icon(icon, contentDescription = null) },
+            shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth()
         )
         Box(
