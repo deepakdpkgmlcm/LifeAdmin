@@ -86,6 +86,7 @@ fun HomeScreen(
     onAdd: () -> Unit,
     onOpen: (Long) -> Unit,
     onSettings: () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
@@ -126,6 +127,7 @@ fun HomeScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = bottomBar,
         floatingActionButton = {
             if (!items.isNullOrEmpty()) {
                 ExtendedFloatingActionButton(
@@ -166,7 +168,7 @@ fun HomeScreen(
                         start = 20.dp,
                         end = 20.dp,
                         top = padding.calculateTopPadding() + 20.dp,
-                        bottom = padding.calculateBottomPadding() + 100.dp
+                        bottom = padding.calculateBottomPadding() + 90.dp
                     )
                 ) {
                     item(key = "header") { Header(today, onSettings) }
@@ -300,36 +302,8 @@ private fun LazyListScope.timeline(
 
 @Composable
 private fun Header(today: LocalDate, onSettings: () -> Unit) {
-    val extra = Extra.colors
-    Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                Format.headerDate(today),
-                fontFamily = DmMono,
-                fontSize = 12.sp,
-                letterSpacing = 0.7.sp,
-                color = extra.muted
-            )
-            Spacer(Modifier.height(4.dp))
-            Text("Coming up", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
-        }
-        SettingsButton(onSettings)
-    }
-}
-
-@Composable
-private fun SettingsButton(onClick: () -> Unit) {
-    val extra = Extra.colors
-    val shape = RoundedCornerShape(14.dp)
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(44.dp)
-            .clip(shape)
-            .background(extra.card)
-            .border(1.dp, extra.line, shape)
-    ) {
-        Icon(Icons.Outlined.Tune, contentDescription = "Settings", tint = extra.ink)
+    PageHeader(eyebrow = Format.headerDate(today), title = "Coming up") {
+        HeaderIconButton(Icons.Outlined.Tune, "Settings", onSettings)
     }
 }
 

@@ -5,12 +5,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lifeadmin.app.data.AppDatabase
 import com.lifeadmin.app.data.AppSettings
+import com.lifeadmin.app.data.Backup
 import com.lifeadmin.app.data.Category
 import com.lifeadmin.app.data.Cycle
+import com.lifeadmin.app.data.History
 import com.lifeadmin.app.data.Item
 import com.lifeadmin.app.data.dueDate
 import com.lifeadmin.app.reminders.Notifier
 import com.lifeadmin.app.reminders.ReminderScheduler
+import androidx.room.withTransaction
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -31,12 +35,24 @@ data class Draft(
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val dao = AppDatabase.get(app).itemDao()
+    private val db = AppDatabase.get(app)
+    private val dao = db.itemDao()
+    private val historyDao = db.historyDao()
     val settings = AppSettings(app)
 
     /** null while the first load is in progress. */
     val items: StateFlow<List<Item>?> = dao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val history: StateFlow<List<History>> = historyDao.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun observeItem(id: Long): Flow<Item?> = dao.observe(id)
+
+    fun observeHistory(itemId: Long): Flow<List<History>> = historyDao.observeForItem(itemId)
+
+    /** History rows created by the last renew of each item, so Undo can remove them. */
+    private val lastRenewHistory = mutableMapOf<Long, Long>()
 
     suspend fun get(id: Long): Item? = dao.get(id)
 
@@ -93,11 +109,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** For repeating items: move to the next due date after the person has paid/renewed. */
     fun markRenewed(id: Long) {
         viewModelScope.launch {
-            dao.get(id)?.let {
-                val next = it.cycle.next(it.dueDate())
-                dao.update(it.copy(dueEpochDay = next.toEpochDay(), lastNotifiedStage = Item.NOT_NOTIFIED))
-                Notifier.cancel(getApplication<Application>(), it.id.toInt())
-            }
+            dao.get(id)?.let { renewNow(it) }
         }
     }
 
@@ -110,25 +122,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Swipe-to-pay / "Mark as paid" from the home screen: moves a repeating item to its
-     * next due date and returns that date. Pair with [restore] for Undo.
+     * Swipe-to-pay / "Mark as paid": records the payment in history, moves a repeating
+     * item to its next due date and returns that date. Pair with [restore] for Undo.
      */
     fun renewItem(item: Item): LocalDate {
         val next = item.cycle.next(item.dueDate())
-        viewModelScope.launch {
-            dao.update(item.copy(dueEpochDay = next.toEpochDay(), lastNotifiedStage = Item.NOT_NOTIFIED))
-            Notifier.cancel(getApplication<Application>(), item.id.toInt())
-        }
+        viewModelScope.launch { renewNow(item) }
         return next
     }
 
-    /** Puts an item back exactly as it was (Undo). */
+    private suspend fun renewNow(item: Item) {
+        val next = item.cycle.next(item.dueDate())
+        val historyId = historyDao.insert(
+            History(
+                itemId = item.id,
+                itemTitle = item.title,
+                category = item.category,
+                dueEpochDay = item.dueEpochDay,
+                amount = item.amount,
+                currency = item.currency,
+            )
+        )
+        lastRenewHistory[item.id] = historyId
+        dao.update(item.copy(dueEpochDay = next.toEpochDay(), lastNotifiedStage = Item.NOT_NOTIFIED))
+        Notifier.cancel(getApplication<Application>(), item.id.toInt())
+    }
+
+    /** Puts an item back exactly as it was (Undo), removing a just-recorded payment. */
     fun restore(item: Item) {
-        viewModelScope.launch { dao.upsert(item) }
+        viewModelScope.launch {
+            dao.upsert(item)
+            lastRenewHistory.remove(item.id)?.let { historyDao.deleteById(it) }
+        }
     }
 
     fun setReminderHour(hour: Int) {
         settings.reminderHour = hour
         ReminderScheduler.scheduleDaily(getApplication<Application>(), hour, reschedule = true)
+    }
+
+    suspend fun exportBackup(): String = Backup.toJson(dao.getAll(), historyDao.getAll())
+
+    /**
+     * Replaces everything with the backup's contents. Returns how many items were restored.
+     * Throws IllegalArgumentException if the file isn't a valid backup.
+     */
+    suspend fun importBackup(text: String): Int {
+        val parsed = Backup.fromJson(text)
+        db.withTransaction {
+            historyDao.deleteAll()
+            dao.deleteAll()
+            dao.insertAll(parsed.items.map { it.copy(lastNotifiedStage = Item.NOT_NOTIFIED) })
+            historyDao.insertAll(parsed.history)
+        }
+        return parsed.items.size
     }
 }

@@ -139,24 +139,7 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (isNew) "Add item" else "Edit item") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (!isNew) {
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete")
-                        }
-                    }
-                    TextButton(onClick = { save() }) { Text("Save") }
-                }
-            )
-        }
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         if (!loaded) return@Scaffold
 
@@ -166,11 +149,23 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HeaderIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onDone)
+                Spacer(Modifier.weight(1f))
+                if (!isNew) {
+                    HeaderIconButton(Icons.Outlined.Delete, "Delete") { confirmDelete = true }
+                }
+            }
+            PageHeader(
+                eyebrow = if (isNew) "New item" else category.label,
+                title = if (isNew) "Add item" else "Edit item"
+            )
+
             // Category
-            Text("Category", style = MaterialTheme.typography.labelLarge)
+            SectionLabel("Category", Extra.colors.muted)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(Category.entries.toList()) { c ->
                     FilterChip(
@@ -186,7 +181,7 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
             if (isNew) {
                 val suggestions = Templates.forCategory(category)
                 if (suggestions.isNotEmpty()) {
-                    Text("Suggestions", style = MaterialTheme.typography.labelLarge)
+                    SectionLabel("Quick add", Extra.colors.muted)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(suggestions) { t ->
                             SuggestionChip(
@@ -276,7 +271,7 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 )
             }
 
-            Text("Remind me", style = MaterialTheme.typography.labelLarge)
+            SectionLabel("Remind me", Extra.colors.muted)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(REMINDER_OPTIONS) { days ->
                     FilterChip(

@@ -30,4 +30,13 @@ interface ItemDao {
 
     @Delete
     suspend fun delete(item: Item)
+
+    @Query("SELECT * FROM items WHERE id = :id")
+    fun observe(id: Long): Flow<Item?>
+
+    @Insert
+    suspend fun insertAll(items: List<Item>)
+
+    @Query("DELETE FROM items")
+    suspend fun deleteAll()
 }

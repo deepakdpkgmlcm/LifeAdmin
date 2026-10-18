@@ -21,6 +21,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_ASKED, false)
         set(value) = prefs.edit().putBoolean(KEY_ASKED, value).apply()
 
+    /** True once the welcome screens have been seen. */
+    var onboarded: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDED, value).apply()
+
     private fun defaultCurrency(): String =
         try {
             Currency.getInstance(Locale.getDefault()).currencyCode
@@ -32,5 +37,6 @@ class AppSettings(context: Context) {
         const val KEY_HOUR = "reminder_hour"
         const val KEY_CURRENCY = "currency"
         const val KEY_ASKED = "asked_notification_permission"
+        const val KEY_ONBOARDED = "onboarded"
     }
 }
