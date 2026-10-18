@@ -23,7 +23,11 @@ class LifeAdminApp : Application() {
         com.lifeadmin.app.ui.theme.ThemeState.load(this)
         Notifier.createChannels(this)
         ReminderScheduler.scheduleDaily(this, AppSettings(this).reminderHour, reschedule = false)
-        appScope.launch { AlarmScheduler.rescheduleAll(this@LifeAdminApp) }
+        appScope.launch {
+            AlarmScheduler.rescheduleAll(this@LifeAdminApp)
+            com.lifeadmin.app.util.Attachments.cleanUp(this@LifeAdminApp)
+        }
+        com.lifeadmin.app.data.AutoBackup.schedule(this)
         // Keep home-screen widgets in step with any change made in the app.
         appScope.launch {
             AppDatabase.get(this@LifeAdminApp).itemDao().observeAll().drop(1).collectLatest {

@@ -14,8 +14,8 @@ android {
         applicationId = "com.lifeadmin.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 9
+        versionName = "0.9.0"
     }
 
     signingConfigs {
@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.glance.appwidget)
+    implementation(libs.mlkit.text)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

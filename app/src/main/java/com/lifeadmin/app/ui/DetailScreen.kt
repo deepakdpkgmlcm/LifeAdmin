@@ -1,5 +1,11 @@
 package com.lifeadmin.app.ui
 
+import androidx.compose.material.icons.outlined.Delete
+
+import androidx.compose.material.icons.outlined.Description
+
+import androidx.compose.material.icons.outlined.Image
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -326,6 +332,8 @@ fun DetailScreen(
                 AppCard { Text(current.notes, fontSize = 15.sp, lineHeight = 22.sp) }
             }
 
+            AttachmentsSection(vm, current.id)
+
             SectionLabel(if (current.kind == Kind.PAYMENT) "Payment history" else "History", extra.muted)
             AppCard {
                 if (history.isEmpty()) {
@@ -511,4 +519,89 @@ private fun calendarIntent(item: com.lifeadmin.app.data.Item, defaultMinute: Int
     }
     com.lifeadmin.app.util.CalendarExport.rrule(item)?.let { intent.putExtra(android.provider.CalendarContract.Events.RRULE, it) }
     return intent
+}
+
+/** Photos and files kept with the item: policy PDFs, receipts, a photo of the card. */
+@Composable
+private fun AttachmentsSection(vm: AppViewModel, itemId: Long) {
+    val extra = Extra.colors
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val flow = remember(itemId) { vm.observeAttachments(itemId) }
+    val files by flow.collectAsStateWithLifecycle(initialValue = emptyList())
+    var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var toDelete by remember { mutableStateOf<com.lifeadmin.app.data.Attachment?>(null) }
+    val pickFile = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) vm.addAttachment(itemId, uri) }
+    val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { ok -> cameraUri?.let { if (ok) vm.addAttachment(itemId, it) } }
+
+    SectionLabel(if (files.isEmpty()) "Attachments" else "Attachments · ${files.size}", extra.muted)
+    AppCard {
+        if (files.isEmpty()) {
+            Text("Keep the policy, receipt or a photo of the card here.", color = extra.muted, fontSize = 13.sp)
+        }
+        files.forEach { a ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (!com.lifeadmin.app.util.Attachments.open(context, a)) {
+                            vm.undoEvent.value = UndoEvent("No app found to open this file", null)
+                        }
+                    }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    if (a.mimeType.startsWith("image/")) Icons.Outlined.Image else Icons.Outlined.Description,
+                    contentDescription = null, tint = extra.later
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(a.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+                    Text(
+                        "Added " + com.lifeadmin.app.util.Format.shortDate(
+                            java.time.Instant.ofEpochMilli(a.addedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                        ),
+                        color = extra.muted, fontSize = 12.sp
+                    )
+                }
+                androidx.compose.material3.IconButton(onClick = { toDelete = a }) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Remove ${a.name}", tint = extra.muted)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    val uri = com.lifeadmin.app.util.Scanner.newPhotoUri(context)
+                    cameraUri = uri
+                    try { takePhoto.launch(uri) } catch (e: android.content.ActivityNotFoundException) {
+                        vm.undoEvent.value = UndoEvent("No camera app found", null)
+                    }
+                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                modifier = Modifier.weight(1f)
+            ) { Text("Take photo") }
+            androidx.compose.material3.OutlinedButton(
+                onClick = { pickFile.launch(arrayOf("image/*", "application/pdf", "*/*")) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                modifier = Modifier.weight(1f)
+            ) { Text("Add file") }
+        }
+    }
+
+    toDelete?.let { a ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { toDelete = null },
+            title = { Text("Remove ${a.name}?") },
+            text = { Text("The file is deleted from LifeAdmin.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { vm.deleteAttachment(a); toDelete = null }) { Text("Remove") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { toDelete = null }) { Text("Cancel") } }
+        )
+    }
 }

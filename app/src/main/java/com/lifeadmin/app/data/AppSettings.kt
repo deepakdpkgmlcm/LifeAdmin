@@ -106,6 +106,15 @@ class AppSettings(context: Context) {
         return { amount, from -> com.lifeadmin.app.util.Money.convert(amount, from, main, rates) }
     }
 
+    /** Folder (a document tree link) for automatic weekly backups; blank = off. */
+    var autoBackupFolder: String
+        get() = prefs.getString("auto_backup_folder", "") ?: ""
+        set(value) = prefs.edit().putString("auto_backup_folder", value).apply()
+
+    var lastAutoBackup: Long
+        get() = prefs.getLong("auto_backup_last", 0L)
+        set(value) = prefs.edit().putLong("auto_backup_last", value).apply()
+
     // ---- Privacy ----
     /** Ask for fingerprint, face or screen lock when the app opens. */
     var appLock: Boolean

@@ -1,5 +1,19 @@
 package com.lifeadmin.app.ui
 
+import kotlinx.coroutines.launch
+
+import androidx.compose.runtime.rememberCoroutineScope
+
+import androidx.compose.material3.OutlinedButton
+
+import androidx.compose.material.icons.outlined.DocumentScanner
+
+import androidx.activity.result.PickVisualMediaRequest
+
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+
 import java.time.YearMonth
 
 import com.lifeadmin.app.reminders.Schedule
@@ -161,6 +175,53 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
     var highPriority by rememberSaveable { mutableStateOf(false) }
     var checklist by rememberSaveable { mutableStateOf("") }
     var repeatRule by rememberSaveable { mutableStateOf("") }
+    /** Photos from a scan, attached once the item is saved. */
+    var scanPhotos by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
+    var scanning by remember { mutableStateOf(false) }
+    var scanMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun applyScan(uri: android.net.Uri) {
+        scanning = true
+        scanMessage = null
+        scope.launch {
+            val text = runCatching { com.lifeadmin.app.util.Scanner.readText(context, uri) }
+            scanning = false
+            val raw = text.getOrNull()
+            if (raw == null) {
+                scanMessage = "Couldn't read the photo. If this is the first scan, the reader may still be downloading — try again in a minute."
+                return@launch
+            }
+            val dayFirst = Locale.getDefault().country !in setOf("US", "PH", "CA")
+            val r = com.lifeadmin.app.data.ScanParse.parse(raw, LocalDate.now(), dayFirst)
+            scanPhotos = scanPhotos + uri
+            if (title.isBlank() && r.title.isNotBlank()) title = r.title
+            if (r.kind != kind) {
+                kind = r.kind
+                category = firstCategory(r.kind)
+                alerts = vm.settings.defaultAlerts(r.kind)
+                alertStyle = vm.settings.defaultStyle(r.kind)
+                if (!subDailyCycle(cycle)) allDay = true
+            }
+            r.date?.let { dueEpochDay = it.toEpochDay() }
+            r.amount?.let { a -> amountText = if (a % 1.0 == 0.0) a.toLong().toString() else a.toString() }
+            r.currency?.let { currency = it }
+            val found = listOfNotNull(
+                r.date?.let { "date " + Format.date(it) },
+                r.amount?.let { Format.money(it, r.currency ?: currency) }
+            )
+            scanMessage = if (found.isEmpty()) "No date or amount found — fill them in below. The photo will be attached."
+            else "Found " + found.joinToString(" and ") + ". Check the details below; the photo will be attached."
+        }
+    }
+    var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = cameraUri
+        if (ok && uri != null) applyScan(uri)
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) applyScan(uri)
+    }
 
     // Pre-filled from quick add ("Edit details"), a scan, or an app shortcut.
     LaunchedEffect(Unit) {
@@ -255,7 +316,8 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
         }
         vm.save(
             itemId,
-            Draft(
+            attach = scanPhotos,
+            d = Draft(
                 title = title,
                 kind = kind,
                 category = category,
@@ -307,6 +369,51 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 eyebrow = if (isNew) "New ${kind.label.lowercase()}" else category.label,
                 title = if (isNew) "Add" else "Edit"
             )
+
+            // ---- Scan ----
+            if (isNew) {
+                AppCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.DocumentScanner, contentDescription = null, tint = extra.later)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Scan a bill or document", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Fills in the due or expiry date and amount", color = extra.muted, fontSize = 12.sp)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val uri = com.lifeadmin.app.util.Scanner.newPhotoUri(context)
+                                cameraUri = uri
+                                try { takePhoto.launch(uri) } catch (e: android.content.ActivityNotFoundException) {
+                                    scanMessage = "No camera app found"
+                                }
+                            },
+                            enabled = !scanning,
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Take photo") }
+                        OutlinedButton(
+                            onClick = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                            enabled = !scanning,
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("From gallery") }
+                    }
+                    if (scanning) {
+                        androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Reading…", color = extra.muted, fontSize = 12.sp)
+                    }
+                    scanMessage?.let { Text(it, color = extra.muted, fontSize = 13.sp) }
+                    if (scanPhotos.isNotEmpty()) {
+                        Text(
+                            if (scanPhotos.size == 1) "1 photo will be attached" else "${scanPhotos.size} photos will be attached",
+                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = extra.later
+                        )
+                    }
+                }
+            }
 
             // ---- What kind of thing ----
             ChoicePills(
@@ -972,3 +1079,5 @@ private fun monthlyRuleLabel(rule: String, due: LocalDate): String = when {
     rule.startsWith("NTH:") -> "The " + Format.nthText(rule)
     else -> rule
 }
+
+private fun subDailyCycle(c: Cycle) = c == Cycle.MINUTES || c == Cycle.HOURS

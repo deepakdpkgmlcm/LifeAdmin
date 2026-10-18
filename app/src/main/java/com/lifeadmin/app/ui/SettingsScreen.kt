@@ -402,6 +402,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         Text("Restore")
                     }
                 }
+                AutoBackupRow(snackbar)
+                Text(
+                    "Backups include all items and history. Attached files stay on this phone.",
+                    color = extra.muted, fontSize = 12.sp
+                )
             }
 
             LabeledCard("About") {
@@ -499,6 +504,62 @@ private fun ExchangeRates(vm: AppViewModel, main: String) {
                 rate = ""
             }
         ) { Text("Add") }
+    }
+}
+
+/** Weekly backup into a folder the person picks; the toggle asks for the folder. */
+@Composable
+private fun AutoBackupRow(snackbar: SnackbarHostState) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settings = remember { com.lifeadmin.app.data.AppSettings(context) }
+    var folder by remember { mutableStateOf(settings.autoBackupFolder) }
+    var last by remember { mutableStateOf(settings.lastAutoBackup) }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        settings.autoBackupFolder = uri.toString()
+        folder = uri.toString()
+        com.lifeadmin.app.data.AutoBackup.schedule(context)
+        scope.launch {
+            val ok = com.lifeadmin.app.data.AutoBackup.runNow(context)
+            last = settings.lastAutoBackup
+            snackbar.showSnackbar(if (ok) "Weekly backup on · first backup saved" else "Couldn't save to that folder")
+        }
+    }
+    val subtitle = when {
+        folder.isBlank() -> "Save a backup to a folder you choose every week"
+        last == 0L -> "On · waiting for the first backup"
+        else -> "On · last saved " + Format.shortDate(
+            java.time.Instant.ofEpochMilli(last).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        )
+    }
+    ToggleRow("Automatic weekly backup", subtitle, folder.isNotBlank()) { on ->
+        if (on) {
+            pickFolder.launch(null)
+        } else {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(folder), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            settings.autoBackupFolder = ""
+            folder = ""
+            com.lifeadmin.app.data.AutoBackup.schedule(context)
+        }
+    }
+    if (folder.isNotBlank()) {
+        TextButton(onClick = {
+            scope.launch {
+                val ok = com.lifeadmin.app.data.AutoBackup.runNow(context)
+                last = settings.lastAutoBackup
+                snackbar.showSnackbar(if (ok) "Backup saved" else "Couldn't save the backup — pick the folder again")
+            }
+        }) { Text("Back up now") }
     }
 }
 

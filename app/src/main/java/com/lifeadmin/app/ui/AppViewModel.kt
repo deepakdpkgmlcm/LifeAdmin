@@ -149,7 +149,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun get(id: Long): Item? = dao.get(id)
 
-    fun save(id: Long?, d: Draft) {
+    // ---- Attachments ----
+    fun observeAttachments(itemId: Long) = db.attachmentDao().observeForItem(itemId)
+
+    fun addAttachment(itemId: Long, uri: android.net.Uri) {
+        viewModelScope.launch {
+            if (com.lifeadmin.app.util.Attachments.add(ctx, itemId, uri) == null) {
+                undoEvent.value = UndoEvent("Couldn't add that file (max 25 MB)", null)
+            }
+        }
+    }
+
+    fun deleteAttachment(a: com.lifeadmin.app.data.Attachment) {
+        viewModelScope.launch { com.lifeadmin.app.util.Attachments.delete(ctx, a) }
+    }
+
+    fun save(id: Long?, d: Draft, attach: List<android.net.Uri> = emptyList()) {
         viewModelScope.launch {
             val repeating = d.cycle != Cycle.NONE
             val old = id?.let { dao.get(it) }
@@ -197,6 +212,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val saved = if (old == null) item.copy(id = dao.insert(item)) else item.also { dao.update(it) }
             if (old != null && scheduleChanged) Notifier.cancel(ctx, old.id.toInt())
             AlarmScheduler.schedule(ctx, saved)
+            attach.forEach { com.lifeadmin.app.util.Attachments.add(ctx, saved.id, it) }
         }
     }
 

@@ -1,5 +1,15 @@
 package com.lifeadmin.app.ui
 
+import androidx.compose.ui.semantics.semantics
+
+import androidx.compose.ui.semantics.contentDescription
+
+import androidx.compose.runtime.mutableStateOf
+
+import androidx.compose.runtime.setValue
+
+import androidx.compose.animation.core.animateFloatAsState
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -88,6 +98,17 @@ fun InsightsScreen(
 
     fun money(v: Double) = Format.money(Math.round(v).toDouble(), currency)
 
+    // Paid per month, last six months (spending trend).
+    val trend: List<Pair<java.time.YearMonth, Double>> = remember(history, currency) {
+        val now = java.time.YearMonth.from(today)
+        val months = (5 downTo 0).map { now.minusMonths(it.toLong()) }
+        val sums = history
+            .filter { it.amount != null }
+            .groupBy { java.time.YearMonth.from(Instant.ofEpochMilli(it.paidAt).atZone(ZoneId.systemDefault())) }
+            .mapValues { (_, list) -> list.sumOf { h -> conv(h.amount!!, h.currency) ?: 0.0 } }
+        months.map { it to (sums[it] ?: 0.0) }
+    }
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background, bottomBar = bottomBar) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -128,6 +149,14 @@ fun InsightsScreen(
                         if (next30Total > 0) "${next30.size} items" else "items", Modifier.weight(1f))
                     MiniStat("Paid this year", if (paidThisYear > 0) money(paidThisYear) else "${thisYear.size}",
                         if (paidThisYear > 0) "${thisYear.size} payments" else "payments", Modifier.weight(1f))
+                }
+            }
+
+            if (trend.any { it.second > 0 }) {
+                item(key = "trend") {
+                    LabeledCard("Spending trend · last 6 months") {
+                        TrendChart(trend, ::money)
+                    }
                 }
             }
 
@@ -264,3 +293,69 @@ private fun BigRow(item: Item, yearly: String, onClick: () -> Unit) {
     }
 }
 
+
+/** Bars for money paid each month; the current month is highlighted. */
+@Composable
+private fun TrendChart(data: List<Pair<java.time.YearMonth, Double>>, money: (Double) -> String) {
+    val extra = Extra.colors
+    val max = data.maxOf { it.second }.takeIf { it > 0 } ?: 1.0
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val last = data.last()
+    val prev = data[data.size - 2]
+    Text(
+        when {
+            prev.second <= 0 -> "${money(last.second)} paid this month"
+            else -> {
+                val change = ((last.second - prev.second) / prev.second * 100).toInt()
+                "${money(last.second)} this month · " + when {
+                    change > 0 -> "$change% more than last month"
+                    change < 0 -> "${-change}% less than last month"
+                    else -> "same as last month"
+                }
+            }
+        },
+        color = extra.muted, fontSize = 13.sp
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(150.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        data.forEachIndexed { i, (month, value) ->
+            val fraction by animateFloatAsState(
+                targetValue = if (shown) (value / max).toFloat() else 0f,
+                animationSpec = tween(600, delayMillis = i * 60),
+                label = "bar"
+            )
+            val current = i == data.lastIndex
+            Column(
+                Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = month.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()) + ": " + money(value)
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .fillMaxHeight(fraction.coerceAtLeast(0.02f))
+                        .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                        .background(if (current) MaterialTheme.colorScheme.primary else extra.laterBg)
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    month.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault()),
+                    fontSize = 11.sp,
+                    color = if (current) extra.ink else extra.muted,
+                    fontWeight = if (current) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+    }
+}
