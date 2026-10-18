@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+# Release signing keys never go in the repository (they live in GitHub Secrets).
+*.jks
+release.keystore
