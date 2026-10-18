@@ -27,7 +27,8 @@ class BackupTest {
                 dueMinute = 615, cycle = Cycle.WEEKLY, repeatEvery = 2, repeatDays = "1,3,5", repeatLimit = 4,
                 repeatUntilEpochDay = 21000, alertOffsets = "0,10", alertStyle = AlertStyle.ALARM,
                 nagEveryMin = 5, nagCount = 3, done = true, doneAt = 5L,
-                reference = "POL-123", paymentMethod = "UPI"
+                reference = "POL-123", paymentMethod = "UPI", pinned = true, priority = 1,
+                checklist = "1|Photos\n0|Form", repeatRule = "NTH:2:2"
             ),
         )
         val history = listOf(

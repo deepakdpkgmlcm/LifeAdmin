@@ -40,6 +40,10 @@ object Backup {
                     if (i.doneAt != null) put("doneAt", i.doneAt)
                     put("reference", i.reference)
                     put("paymentMethod", i.paymentMethod)
+                    put("pinned", i.pinned)
+                    put("priority", i.priority)
+                    put("checklist", i.checklist)
+                    put("repeatRule", i.repeatRule)
                 })
             }
         })
@@ -102,6 +106,10 @@ object Backup {
                 doneAt = if (o.has("doneAt")) o.getLong("doneAt") else null,
                 reference = o.optString("reference", ""),
                 paymentMethod = o.optString("paymentMethod", ""),
+                pinned = o.optBoolean("pinned", false),
+                priority = o.optInt("priority", 0),
+                checklist = o.optString("checklist", ""),
+                repeatRule = o.optString("repeatRule", ""),
             )
         }
         val historyJson = root.optJSONArray("history") ?: JSONArray()

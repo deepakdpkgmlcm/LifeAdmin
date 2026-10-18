@@ -36,30 +36,77 @@ import com.lifeadmin.app.ui.SplashScreen
 import com.lifeadmin.app.ui.Tab
 import com.lifeadmin.app.ui.WelcomeScreen
 import com.lifeadmin.app.ui.theme.LifeAdminTheme
+import android.content.Intent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lifeadmin.app.data.Category
+import com.lifeadmin.app.data.Cycle
+import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.ui.AmountPromptDialog
+import com.lifeadmin.app.ui.Draft
+import java.time.LocalDate
+import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
+    /** An app-icon shortcut waiting to be handled ("add reminder", "calendar", ...). */
+    private val shortcut = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Opened from a reminder: go straight in, no launch animation.
-        val skipSplash = intent?.getBooleanExtra(EXTRA_SKIP_SPLASH, false) == true
+        shortcut.value = intent?.action?.takeIf { it.startsWith(SHORTCUT_PREFIX) }
+        // Opened from a reminder or a shortcut: go straight in, no launch animation.
+        val skipSplash = intent?.getBooleanExtra(EXTRA_SKIP_SPLASH, false) == true || shortcut.value != null
         setContent {
             LifeAdminTheme {
-                AppRoot(skipSplash)
+                AppRoot(skipSplash, shortcut.value) { shortcut.value = null }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.action?.takeIf { it.startsWith(SHORTCUT_PREFIX) }?.let { shortcut.value = it }
+    }
+
     companion object {
         const val EXTRA_SKIP_SPLASH = "skipSplash"
+        const val SHORTCUT_PREFIX = "com.lifeadmin.app.shortcut."
     }
+}
+
+/** An empty editor draft of the given kind (for "Add reminder" style shortcuts). */
+private fun blankDraft(kind: Kind, vm: AppViewModel): Draft {
+    val nextHour = LocalDateTime.now().plusHours(1).withMinute(0)
+    return Draft(
+        title = "",
+        kind = kind,
+        category = Category.entries.first { it.defaultKind == kind },
+        dueEpochDay = if (kind == Kind.REMINDER) nextHour.toLocalDate().toEpochDay() else LocalDate.now().toEpochDay(),
+        dueMinute = if (kind == Kind.REMINDER) nextHour.hour * 60 else null,
+        cycle = Cycle.NONE,
+        repeatEvery = 1,
+        repeatDays = "",
+        repeatLimit = null,
+        repeatUntilEpochDay = null,
+        autoRenew = kind == Kind.REMINDER,
+        amount = null,
+        currency = vm.settings.currency,
+        notes = "",
+        alertOffsets = vm.settings.defaultAlerts(kind),
+        alertStyle = vm.settings.defaultStyle(kind),
+        nagEveryMin = 0,
+        nagCount = 0,
+    )
 }
 
 private const val TAB_ANIM = 200
 private const val PUSH_ANIM = 280
 
 @Composable
-private fun AppRoot(skipSplash: Boolean) {
+private fun AppRoot(skipSplash: Boolean, shortcut: String?, consumeShortcut: () -> Unit) {
     val vm: AppViewModel = viewModel()
     val nav = rememberNavController()
     val afterSplash = if (vm.settings.onboarded) Tab.HOME.route else "welcome"
@@ -75,6 +122,32 @@ private fun AppRoot(skipSplash: Boolean) {
     }
 
     val bar: @Composable (Tab) -> Unit = { current -> AppBottomBar(current) { goTab(it) } }
+
+    // App-icon shortcuts.
+    LaunchedEffect(shortcut) {
+        val action = shortcut ?: return@LaunchedEffect
+        consumeShortcut()
+        if (!vm.settings.onboarded) return@LaunchedEffect
+        when (action.removePrefix(MainActivity.SHORTCUT_PREFIX)) {
+            "ADD_REMINDER" -> { vm.prefill.value = blankDraft(Kind.REMINDER, vm); nav.navigate("edit") }
+            "ADD_PAYMENT" -> { vm.prefill.value = blankDraft(Kind.PAYMENT, vm); nav.navigate("edit") }
+            "ADD_EXPIRY" -> { vm.prefill.value = blankDraft(Kind.RENEWAL, vm); nav.navigate("edit") }
+            "CALENDAR" -> goTab(Tab.CALENDAR)
+        }
+    }
+
+    // "How much did you pay?" when marking a payment as paid.
+    val amountPrompt by vm.amountPrompt.collectAsStateWithLifecycle()
+    amountPrompt?.let { item ->
+        AmountPromptDialog(
+            item = item,
+            onConfirm = { amount ->
+                vm.amountPrompt.value = null
+                vm.completeWithFeedback(item, amount, skipPrompt = true)
+            },
+            onDismiss = { vm.amountPrompt.value = null }
+        )
+    }
 
     NavHost(
         navController = nav,

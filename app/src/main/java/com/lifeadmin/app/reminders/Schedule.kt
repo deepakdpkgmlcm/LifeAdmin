@@ -153,20 +153,33 @@ object Schedule {
         return movedTo(item, next)
     }
 
+    /** Whether [minuteOfDay] falls inside quiet hours [start, end), which may wrap past midnight. */
+    fun inQuietHours(minuteOfDay: Int, start: Int, end: Int): Boolean = when {
+        start == end -> false
+        start < end -> minuteOfDay in start until end
+        else -> minuteOfDay >= start || minuteOfDay < end
+    }
+
+    /** The moment quiet hours end, after [now]. */
+    fun quietEnd(now: LocalDateTime, end: Int): LocalDateTime {
+        val todayEnd = now.toLocalDate().atStartOfDay().plusMinutes(end.toLong())
+        return if (todayEnd.isAfter(now)) todayEnd else todayEnd.plusDays(1)
+    }
+
     data class Completion(val updated: Item, val history: History, val next: LocalDateTime?)
 
     /**
      * "Done" / "Paid" / "Renewed": records it, then moves a repeating item to its next
      * occurrence, or marks a one-off item as done.
      */
-    fun complete(item: Item, nowMillis: Long, defaultMinute: Int): Completion {
+    fun complete(item: Item, nowMillis: Long, defaultMinute: Int, actualAmount: Double? = null): Completion {
         val history = History(
             itemId = item.id,
             itemTitle = item.title,
             category = item.category,
             dueEpochDay = item.dueEpochDay,
             paidAt = nowMillis,
-            amount = if (item.kind == Kind.REMINDER) null else item.amount,
+            amount = if (item.kind == Kind.REMINDER) null else (actualAmount ?: item.amount),
             currency = item.currency,
             kind = item.kind.name,
         )
@@ -177,5 +190,20 @@ object Schedule {
             item.copy(done = true, doneAt = nowMillis, snoozedUntil = null)
         }
         return Completion(updated, history, next)
+    }
+
+    /**
+     * Consecutive days, ending today or yesterday, on which this was completed at least once.
+     * Used for habit-like reminders ("12-day streak").
+     */
+    fun streak(completionDays: Collection<java.time.LocalDate>, today: java.time.LocalDate): Int {
+        val days = completionDays.toSet()
+        var d = if (today in days) today else today.minusDays(1)
+        var count = 0
+        while (d in days) {
+            count++
+            d = d.minusDays(1)
+        }
+        return count
     }
 }

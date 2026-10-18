@@ -30,7 +30,10 @@ class AlarmReceiver : BroadcastReceiver() {
         val minutes = intent.getIntExtra(EXTRA_MINUTES, 10)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                if (id > 0) {
+                if (intent.action == ACTION_DIGEST) {
+                    Digest.show(app)
+                    AlarmScheduler.scheduleDigest(app)
+                } else if (id > 0) {
                     when (intent.action) {
                         ACTION_FIRE -> fire(app, id)
                         ACTION_DONE -> ItemOps.completeFromAlert(app, id, occurrence)
@@ -58,6 +61,22 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         val occurrence = Schedule.occurrence(item, defMin)
         val snoozed = item.snoozedUntil != null && item.snoozedUntil <= nowMs + 60_000
+
+        // Quiet hours: hold the reminder until they end (alarms can be allowed through).
+        val settings = com.lifeadmin.app.data.AppSettings(context)
+        val isAlarm = item.alertStyle == com.lifeadmin.app.data.AlertStyle.ALARM
+        if (settings.quietEnabled && !(isAlarm && settings.quietAllowAlarms) &&
+            Schedule.inQuietHours(now.hour * 60 + now.minute, settings.quietStart, settings.quietEnd)
+        ) {
+            val held = item.copy(
+                lastFiredAt = nowMs,
+                snoozedUntil = Schedule.toMillis(Schedule.quietEnd(now, settings.quietEnd), zone),
+            )
+            dao.update(held)
+            AlarmScheduler.schedule(context, held)
+            return
+        }
+
         Notifier.alert(context, item, alertText(item, occurrence, now, snoozed), Schedule.toMillis(occurrence, zone))
 
         var updated = item.copy(
@@ -73,6 +92,7 @@ class AlarmReceiver : BroadcastReceiver() {
         const val ACTION_FIRE = "com.lifeadmin.app.action.FIRE"
         const val ACTION_DONE = "com.lifeadmin.app.action.DONE"
         const val ACTION_SNOOZE = "com.lifeadmin.app.action.SNOOZE"
+        const val ACTION_DIGEST = "com.lifeadmin.app.action.DIGEST"
         const val EXTRA_ID = "itemId"
         const val EXTRA_OCCURRENCE = "occurrence"
         const val EXTRA_MINUTES = "minutes"
@@ -131,13 +151,14 @@ class AlarmReceiver : BroadcastReceiver() {
 object ItemOps {
 
     /** Completes an item and returns what happened (for Undo). */
-    suspend fun complete(context: Context, item: Item): Schedule.Completion {
+    suspend fun complete(context: Context, item: Item, actualAmount: Double? = null): Schedule.Completion {
         val db = AppDatabase.get(context)
-        val c = Schedule.complete(item, System.currentTimeMillis(), AlarmScheduler.defaultMinute(context))
+        val c = Schedule.complete(item, System.currentTimeMillis(), AlarmScheduler.defaultMinute(context), actualAmount)
         val historyId = db.historyDao().insert(c.history)
         db.itemDao().update(c.updated)
         Notifier.cancel(context, item.id.toInt())
         AlarmScheduler.schedule(context, c.updated)
+        WidgetUpdater.update(context)
         return c.copy(history = c.history.copy(id = historyId))
     }
 

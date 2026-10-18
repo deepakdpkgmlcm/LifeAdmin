@@ -27,6 +27,7 @@ object Notifier {
     private const val CHANNEL_ALARMS = "alarms_v1"
     private const val CHANNEL_PAYMENTS = "payments_v1"
     private const val CHANNEL_EXPIRY = "expiry_v1"
+    private const val CHANNEL_DIGEST = "digest_v1"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -48,6 +49,11 @@ object Notifier {
             NotificationChannel(CHANNEL_EXPIRY, "Expiry & renewals", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Documents, insurance, vehicle papers and warranties expiring"
                 enableVibration(true)
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_DIGEST, "Daily summary", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "One morning notification with what's due today"
             }
         )
         nm.createNotificationChannel(
@@ -148,6 +154,26 @@ object Notifier {
         if (alarm) notification.flags = notification.flags or Notification.FLAG_INSISTENT
         NotificationManagerCompat.from(context).notify(id, notification)
     }
+
+    /** The morning summary, as an expandable notification. */
+    @SuppressLint("MissingPermission")
+    fun digest(context: Context, title: String, lines: List<String>) {
+        if (!canNotify(context)) return
+        val style = NotificationCompat.InboxStyle()
+        lines.forEach { style.addLine(it) }
+        val notification = NotificationCompat.Builder(context, CHANNEL_DIGEST)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(lines.firstOrNull() ?: "Open LifeAdmin to see your day")
+            .setStyle(style)
+            .setContentIntent(openAppIntent(context, DIGEST_ID))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        NotificationManagerCompat.from(context).notify(DIGEST_ID, notification)
+    }
+
+    private const val DIGEST_ID = 0x0D16E5
 
     fun cancel(context: Context, id: Int) {
         NotificationManagerCompat.from(context).cancel(id)

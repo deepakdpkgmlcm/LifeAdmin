@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_reminder"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_reminder"
+        android:shortcutShortLabel="@string/shortcut_add_reminder"
+        android:shortcutLongLabel="@string/shortcut_add_reminder">
+        <intent
+            android:action="com.lifeadmin.app.shortcut.ADD_REMINDER"
+            android:targetPackage="com.lifeadmin.app"
+            android:targetClass="com.lifeadmin.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add_payment"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_payment"
+        android:shortcutShortLabel="@string/shortcut_add_payment"
+        android:shortcutLongLabel="@string/shortcut_add_payment">
+        <intent
+            android:action="com.lifeadmin.app.shortcut.ADD_PAYMENT"
+            android:targetPackage="com.lifeadmin.app"
+            android:targetClass="com.lifeadmin.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add_expiry"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_expiry"
+        android:shortcutShortLabel="@string/shortcut_add_expiry"
+        android:shortcutLongLabel="@string/shortcut_add_expiry">
+        <intent
+            android:action="com.lifeadmin.app.shortcut.ADD_EXPIRY"
+            android:targetPackage="com.lifeadmin.app"
+            android:targetClass="com.lifeadmin.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="calendar"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_calendar"
+        android:shortcutShortLabel="@string/shortcut_calendar"
+        android:shortcutLongLabel="@string/shortcut_calendar">
+        <intent
+            android:action="com.lifeadmin.app.shortcut.CALENDAR"
+            android:targetPackage="com.lifeadmin.app"
+            android:targetClass="com.lifeadmin.app.MainActivity" />
+    </shortcut>
+</shortcuts>

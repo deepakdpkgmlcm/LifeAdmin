@@ -188,6 +188,10 @@ fun HomeScreen(
                 ) {
                     item(key = "header") { Header(today, onSettings) }
 
+                    item(key = "quickadd") {
+                        QuickAddBar(vm, onEditDetails = onAdd, modifier = Modifier.padding(top = 14.dp))
+                    }
+
                     item(key = "summary") {
                         SummaryCard(
                             overdue = overdueCount,
@@ -275,21 +279,26 @@ fun HomeScreen(
                             timeline("day", null, extra.muted, dayItems, today, now, defMin, completing, onOpen, onRenew, onDelete)
                         }
                     } else {
+                        val rest = shown.filterNot { it.pinned }
+                        timeline(
+                            "pinned", "Pinned", extra.ink,
+                            shown.filter { it.pinned }, today, now, defMin, completing, onOpen, onRenew, onDelete
+                        )
                         timeline(
                             "overdue", "Overdue", extra.overdue,
-                            shown.filter { isOverdue(it) }, today, now, defMin, completing, onOpen, onRenew, onDelete
+                            rest.filter { isOverdue(it) }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "week", "Next 7 days", extra.muted,
-                            shown.filter { !isOverdue(it) && it.daysLeft(today) in 0..7 }, today, now, defMin, completing, onOpen, onRenew, onDelete
+                            rest.filter { !isOverdue(it) && it.daysLeft(today) in 0..7 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "month", "This month", extra.muted,
-                            shown.filter { it.daysLeft(today) in 8..30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
+                            rest.filter { it.daysLeft(today) in 8..30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                         timeline(
                             "later", "Later", extra.muted,
-                            shown.filter { it.daysLeft(today) > 30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
+                            rest.filter { it.daysLeft(today) > 30 }, today, now, defMin, completing, onOpen, onRenew, onDelete
                         )
                     }
                 }

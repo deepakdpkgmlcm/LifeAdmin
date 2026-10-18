@@ -71,6 +71,9 @@ import com.lifeadmin.app.ui.theme.DmMono
 import com.lifeadmin.app.ui.theme.Extra
 import com.lifeadmin.app.util.Format
 import com.lifeadmin.app.data.AlertStyle
+import com.lifeadmin.app.data.checklistEntries
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.PushPin
 import com.lifeadmin.app.data.Kind
 import com.lifeadmin.app.reminders.Schedule
 import java.time.LocalDate
@@ -325,6 +328,21 @@ private fun ItemCard(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (item.priority > 0) {
+                        Icon(
+                            Icons.Outlined.Flag, contentDescription = "High priority",
+                            tint = extra.overdue, modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    if (item.pinned) {
+                        Icon(
+                            Icons.Outlined.PushPin, contentDescription = "Pinned",
+                            tint = extra.muted, modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Text(
                         text = item.title,
                         fontSize = 15.sp,
@@ -333,6 +351,7 @@ private fun ItemCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    }
                     Text(
                         text = subtitle,
                         fontSize = 12.sp,
@@ -501,6 +520,8 @@ fun itemUrgency(item: Item, occurrence: LocalDateTime, now: LocalDateTime): Urge
 /** "10:30 · Every 2 hours · Alarm", "Monthly · $35", "Expires". */
 fun itemSubtitle(item: Item): String {
     val parts = mutableListOf<String>()
+    val steps = item.checklistEntries()
+    if (steps.isNotEmpty()) parts += "${steps.count { it.done }}/${steps.size} steps"
     item.dueMinute?.let { parts += Format.time(it) }
     if (item.cycle != Cycle.NONE) parts += Format.repeatText(item)
     if (item.kind != Kind.REMINDER) item.amount?.let { parts += Format.money(it, item.currency) }

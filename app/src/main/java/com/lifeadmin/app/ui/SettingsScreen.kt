@@ -211,6 +211,57 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
             }
 
+            LabeledCard("Daily summary") {
+                var digestOn by remember { mutableStateOf(vm.settings.digestEnabled) }
+                var digestAt by remember { mutableIntStateOf(vm.settings.digestMinute) }
+                ToggleRow("Morning summary", "One notification with today's reminders, bills and expiries", digestOn) {
+                    digestOn = it
+                    vm.settings.digestEnabled = it
+                    AlarmScheduler.scheduleDigest(context)
+                }
+                if (digestOn) {
+                    SelectField(
+                        label = "Summary time",
+                        selected = digestAt,
+                        options = HALF_HOURS,
+                        optionLabel = { com.lifeadmin.app.util.Format.time(it) },
+                        onSelect = {
+                            digestAt = it
+                            vm.settings.digestMinute = it
+                            AlarmScheduler.scheduleDigest(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            LabeledCard("Quiet hours") {
+                var quietOn by remember { mutableStateOf(vm.settings.quietEnabled) }
+                var start by remember { mutableIntStateOf(vm.settings.quietStart) }
+                var end by remember { mutableIntStateOf(vm.settings.quietEnd) }
+                var allowAlarms by remember { mutableStateOf(vm.settings.quietAllowAlarms) }
+                ToggleRow("Quiet hours", "Reminders wait until quiet hours end", quietOn) {
+                    quietOn = it
+                    vm.settings.quietEnabled = it
+                }
+                if (quietOn) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SelectField("From", start, HALF_HOURS, { com.lifeadmin.app.util.Format.time(it) }, {
+                            start = it
+                            vm.settings.quietStart = it
+                        }, Modifier.weight(1f))
+                        SelectField("Until", end, HALF_HOURS, { com.lifeadmin.app.util.Format.time(it) }, {
+                            end = it
+                            vm.settings.quietEnd = it
+                        }, Modifier.weight(1f))
+                    }
+                    ToggleRow("Let alarms ring", "Alarm-style reminders still go off", allowAlarms) {
+                        allowAlarms = it
+                        vm.settings.quietAllowAlarms = it
+                    }
+                }
+            }
+
             LabeledCard("Defaults for new items") {
                 Text(
                     "Each type starts with these alerts and style. You can still change them per item.",
@@ -232,6 +283,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
 
             LabeledCard("Money") {
+                var askAmount by remember { mutableStateOf(vm.settings.askActualAmount) }
+                ToggleRow("Ask the actual amount", "When marking a payment as paid (bills often vary)", askAmount) {
+                    askAmount = it
+                    vm.settings.askActualAmount = it
+                }
                 OutlinedTextField(
                     value = currency,
                     onValueChange = { new ->
@@ -324,6 +380,18 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 }
 
 private const val TEST_NOTIFICATION_ID = 999_999
+private val HALF_HOURS = (0 until 48).map { it * 30 }
+
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(subtitle, color = Extra.colors.muted, fontSize = 12.sp)
+        }
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
 
 private val DEFAULT_TIMED = listOf(0, 5, 10, 15, 30, 60, 1440)
 private val DEFAULT_ALL_DAY = listOf(0, 1440, 4320, 10080, 20160, 43200, 129600)

@@ -151,6 +151,19 @@ data class Item(
     val reference: String = "",
     /** How it's paid: "Auto-debit", "Card", "UPI", ... (empty = not set). */
     val paymentMethod: String = "",
+
+    // ---- v6: organisation ----
+    /** Pinned items stay at the top of the Timeline. */
+    val pinned: Boolean = false,
+    /** 0 = normal, 1 = high. */
+    val priority: Int = 0,
+    /** Checklist lines, one per line, each "1|text" (ticked) or "0|text". */
+    val checklist: String = "",
+    /**
+     * Extra repeat rule: "" (none), "LAST_DAY" / "LAST_WORKDAY" (monthly),
+     * "NTH:2:2" (monthly on the 2nd Tuesday; week 5 = last), "SKIP_WEEKENDS" (daily).
+     */
+    val repeatRule: String = "",
 ) {
     companion object {
         const val NOT_NOTIFIED = Int.MAX_VALUE
@@ -159,6 +172,19 @@ data class Item(
         const val NO_ALERTS = "none"
     }
 }
+
+data class ChecklistEntry(val done: Boolean, val text: String)
+
+fun Item.checklistEntries(): List<ChecklistEntry> = parseChecklist(checklist)
+
+fun parseChecklist(raw: String): List<ChecklistEntry> =
+    raw.lines().filter { it.isNotBlank() }.map { line ->
+        if (line.length >= 2 && line[1] == '|') ChecklistEntry(line[0] == '1', line.substring(2))
+        else ChecklistEntry(false, line)
+    }
+
+fun List<ChecklistEntry>.toChecklistString(): String =
+    joinToString("\n") { (if (it.done) "1|" else "0|") + it.text.replace("\n", " ") }
 
 fun Item.dueDate(): LocalDate = LocalDate.ofEpochDay(dueEpochDay)
 

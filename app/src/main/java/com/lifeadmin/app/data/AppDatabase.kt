@@ -7,10 +7,11 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Item::class, History::class], version = 5, exportSchema = false)
+@Database(entities = [Item::class, History::class, Attachment::class], version = 6, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
     abstract fun historyDao(): HistoryDao
+    abstract fun attachmentDao(): AttachmentDao
 
     companion object {
         const val NAME = "lifeadmin.db"
@@ -84,6 +85,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 -> v6: pinning, priority, checklists, advanced repeat rules, attachments. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `items` ADD COLUMN `pinned` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `items` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `items` ADD COLUMN `checklist` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `items` ADD COLUMN `repeatRule` TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `attachments` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`itemId` INTEGER NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`mimeType` TEXT NOT NULL, " +
+                        "`fileName` TEXT NOT NULL, " +
+                        "`addedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -94,7 +114,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

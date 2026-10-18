@@ -134,6 +134,29 @@ class ScheduleTest {
     }
 
     @Test
+    fun quietHoursWrapPastMidnight() {
+        assertTrue(Schedule.inQuietHours(23 * 60, 22 * 60, 7 * 60))
+        assertTrue(Schedule.inQuietHours(6 * 60, 22 * 60, 7 * 60))
+        assertFalse(Schedule.inQuietHours(12 * 60, 22 * 60, 7 * 60))
+        assertTrue(Schedule.inQuietHours(13 * 60, 12 * 60, 14 * 60))
+        assertEquals(at(7, 0, d.plusDays(1)), Schedule.quietEnd(at(23, 0), 7 * 60))
+        assertEquals(at(7, 0), Schedule.quietEnd(at(2, 0), 7 * 60))
+    }
+
+    @Test
+    fun streakCountsConsecutiveDays() {
+        assertEquals(3, Schedule.streak(listOf(d, d.minusDays(1), d.minusDays(2), d.minusDays(5)), d))
+        assertEquals(2, Schedule.streak(listOf(d.minusDays(1), d.minusDays(2)), d))
+        assertEquals(0, Schedule.streak(listOf(d.minusDays(3)), d))
+    }
+
+    @Test
+    fun actualAmountIsRecorded() {
+        val bill = item(d, cycle = Cycle.MONTHLY, kind = Kind.PAYMENT, amount = 35.0)
+        assertEquals(41.5, Schedule.complete(bill, 1000L, nine, actualAmount = 41.5).history.amount!!, 0.0)
+    }
+
+    @Test
     fun completingOneOffMarksDone() {
         val c = Schedule.complete(item(d), 1000L, nine)
         assertTrue(c.updated.done)

@@ -153,6 +153,36 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
     var reference by rememberSaveable { mutableStateOf("") }
     var paymentMethod by rememberSaveable { mutableStateOf("") }
     var customAlert by remember { mutableStateOf(false) }
+    var pinned by rememberSaveable { mutableStateOf(false) }
+    var highPriority by rememberSaveable { mutableStateOf(false) }
+    var checklist by rememberSaveable { mutableStateOf("") }
+    var repeatRule by rememberSaveable { mutableStateOf("") }
+
+    // Pre-filled from quick add ("Edit details"), a scan, or an app shortcut.
+    LaunchedEffect(Unit) {
+        if (isNew) {
+            vm.prefill.value?.let { d ->
+                title = d.title
+                kind = d.kind
+                category = d.category
+                dueEpochDay = d.dueEpochDay
+                allDay = d.dueMinute == null
+                d.dueMinute?.let { minute = it }
+                cycle = d.cycle
+                every = d.repeatEvery
+                weekDays = d.repeatDays
+                autoRenew = d.autoRenew
+                amountText = d.amount?.let { a -> if (a % 1.0 == 0.0) a.toLong().toString() else a.toString() } ?: ""
+                currency = d.currency.ifBlank { vm.settings.currency }
+                notes = d.notes
+                alerts = d.alertOffsets
+                alertStyle = d.alertStyle
+                checklist = d.checklist
+                reference = d.reference
+                vm.prefill.value = null
+            }
+        }
+    }
     var nagEvery by rememberSaveable { mutableIntStateOf(0) }
     var nagCount by rememberSaveable { mutableIntStateOf(3) }
 
@@ -199,6 +229,10 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 if (s.nagCount > 0) nagCount = s.nagCount
                 reference = s.reference
                 paymentMethod = s.paymentMethod
+                pinned = s.pinned
+                highPriority = s.priority > 0
+                checklist = s.checklist
+                repeatRule = s.repeatRule
             }
             loaded = true
         }
@@ -239,6 +273,10 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 nagCount = nagCount,
                 reference = reference,
                 paymentMethod = paymentMethod,
+                pinned = pinned,
+                priority = if (highPriority) 1 else 0,
+                checklist = checklist,
+                repeatRule = repeatRule,
             )
         )
         onDone()
@@ -317,6 +355,7 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                                     }
                                     alertStyle = if (t.alarm) AlertStyle.ALARM else vm.settings.defaultStyle(kind)
                                     alerts = vm.settings.defaultAlerts(kind)
+                                    if (t.steps.isNotEmpty()) checklist = t.steps.joinToString("\n") { "0|$it" }
                                 },
                                 label = { Text(t.title) }
                             )
@@ -559,6 +598,15 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
                 }
             }
 
+            LabeledCard("Checklist") {
+                ChecklistEditor(checklist) { checklist = it }
+            }
+
+            LabeledCard("Organise") {
+                SwitchRow("Pin to top", "Always shown first on the Timeline", pinned) { pinned = it }
+                SwitchRow("High priority", "Marked with a red flag", highPriority) { highPriority = it }
+            }
+
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
@@ -657,6 +705,50 @@ fun EditScreen(vm: AppViewModel, itemId: Long?, onDone: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
         )
+    }
+}
+
+/** Steps inside an item: tick, remove, add. */
+@Composable
+private fun ChecklistEditor(raw: String, onChange: (String) -> Unit) {
+    val extra = Extra.colors
+    val steps = com.lifeadmin.app.data.parseChecklist(raw)
+    var newStep by remember { mutableStateOf("") }
+    fun commit(list: List<com.lifeadmin.app.data.ChecklistEntry>) {
+        onChange(list.joinToString("\n") { (if (it.done) "1|" else "0|") + it.text })
+    }
+    if (steps.isEmpty()) {
+        Text("Break it into steps, e.g. photos, form, fee.", color = extra.muted, fontSize = 13.sp)
+    }
+    steps.forEachIndexed { index, step ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(
+                checked = step.done,
+                onCheckedChange = { checked ->
+                    commit(steps.toMutableList().also { it[index] = step.copy(done = checked) })
+                }
+            )
+            Text(step.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            IconButton(onClick = { commit(steps.toMutableList().also { it.removeAt(index) }) }) {
+                Icon(Icons.Outlined.Remove, contentDescription = "Remove step", tint = extra.muted)
+            }
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = newStep,
+            onValueChange = { newStep = it },
+            placeholder = { Text("Add a step") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = {
+            if (newStep.isNotBlank()) {
+                commit(steps + com.lifeadmin.app.data.ChecklistEntry(false, newStep.trim()))
+                newStep = ""
+            }
+        }) { Icon(Icons.Filled.Add, contentDescription = "Add step") }
     }
 }
 

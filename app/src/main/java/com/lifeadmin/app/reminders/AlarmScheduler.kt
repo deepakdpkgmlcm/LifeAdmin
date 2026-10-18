@@ -48,6 +48,27 @@ object AlarmScheduler {
         }
     }
 
+    /** The once-a-day summary notification, at the time chosen in Settings. */
+    fun scheduleDigest(context: Context) {
+        val am = context.getSystemService(AlarmManager::class.java)
+        val pi = PendingIntent.getBroadcast(
+            context, DIGEST_REQUEST,
+            Intent(context, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_DIGEST),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val settings = AppSettings(context)
+        if (!settings.digestEnabled) {
+            am.cancel(pi)
+            return
+        }
+        val now = LocalDateTime.now()
+        var next = now.toLocalDate().atStartOfDay().plusMinutes(settings.digestMinute.toLong())
+        if (!next.isAfter(now)) next = next.plusDays(1)
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, Schedule.toMillis(next, ZoneId.systemDefault()), pi)
+    }
+
+    private const val DIGEST_REQUEST = 0x0D16E5
+
     fun cancel(context: Context, itemId: Long) {
         context.getSystemService(AlarmManager::class.java).cancel(AlarmReceiver.fireIntent(context, itemId))
     }
@@ -71,6 +92,8 @@ object AlarmScheduler {
             if (item != original) dao.update(item)
             schedule(context, item)
         }
+        scheduleDigest(context)
+        WidgetUpdater.update(context)
     }
 
     /** What the system shows when someone taps the alarm icon in the status bar. */

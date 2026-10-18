@@ -13,6 +13,7 @@ import com.lifeadmin.app.data.Cycle
 import com.lifeadmin.app.data.History
 import com.lifeadmin.app.data.Item
 import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.data.toChecklistString
 import com.lifeadmin.app.reminders.AlarmScheduler
 import com.lifeadmin.app.reminders.ItemOps
 import com.lifeadmin.app.reminders.Notifier
@@ -50,6 +51,10 @@ data class Draft(
     val nagCount: Int,
     val reference: String = "",
     val paymentMethod: String = "",
+    val pinned: Boolean = false,
+    val priority: Int = 0,
+    val checklist: String = "",
+    val repeatRule: String = "",
 )
 
 /** A message for the Undo bar; [restore] puts the item back as it was. */
@@ -92,12 +97,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * Done / Paid / Renewed with feedback: the card shows a check for a moment, then the
      * item moves to its next date (repeating) or to the Done tab (one-off), with Undo.
      */
-    fun completeWithFeedback(item: Item) {
+    /** A payment waiting for its actual amount before being marked as paid. */
+    val amountPrompt = MutableStateFlow<Item?>(null)
+
+    fun completeWithFeedback(item: Item, actualAmount: Double? = null, skipPrompt: Boolean = false) {
         if (item.id in completing.value) return
+        if (!skipPrompt && item.kind == Kind.PAYMENT && settings.askActualAmount) {
+            amountPrompt.value = item
+            return
+        }
         completing.value = completing.value + item.id
         viewModelScope.launch {
             delay(COMPLETE_ANIMATION_MS)
-            val c = ItemOps.complete(ctx, item)
+            val c = ItemOps.complete(ctx, item, actualAmount)
             lastCompletionHistory[item.id] = c.history.id
             completing.value = completing.value - item.id
             val next = c.next
@@ -110,6 +122,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             undoEvent.value = UndoEvent(message, item)
         }
     }
+
+    fun togglePin(item: Item) {
+        viewModelScope.launch { dao.update(item.copy(pinned = !item.pinned)) }
+    }
+
+    fun updateChecklist(item: Item, entries: List<com.lifeadmin.app.data.ChecklistEntry>) {
+        viewModelScope.launch {
+            dao.get(item.id)?.let { dao.update(it.copy(checklist = entries.toChecklistString())) }
+        }
+    }
+
+    /** Saves a quick-add sentence straight away. */
+    fun quickAdd(r: com.lifeadmin.app.data.QuickParse.Result) {
+        save(null, r.toDraft(settings))
+        undoEvent.value = UndoEvent("Added: ${r.title}", null)
+    }
+
+    /** A new-item draft to open in the editor (from quick add's "Edit details" or a scan). */
+    val prefill = MutableStateFlow<Draft?>(null)
 
     /** History rows created by the last completion of each item, so Undo can remove them. */
     private val lastCompletionHistory = mutableMapOf<Long, Long>()
@@ -124,6 +155,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val old = id?.let { dao.get(it) }
             val base = old ?: Item(title = d.title, category = d.category, dueEpochDay = d.dueEpochDay)
             val scheduleChanged = old == null ||
+                old.repeatRule != d.repeatRule ||
                 old.dueEpochDay != d.dueEpochDay || old.dueMinute != d.dueMinute ||
                 old.alertOffsets != d.alertOffsets || old.cycle != d.cycle ||
                 old.repeatEvery != d.repeatEvery || old.repeatDays != d.repeatDays
@@ -148,6 +180,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 nagCount = if (d.nagEveryMin > 0) d.nagCount else 0,
                 reference = if (d.kind == Kind.REMINDER) "" else d.reference.trim(),
                 paymentMethod = if (d.kind == Kind.PAYMENT) d.paymentMethod else "",
+                pinned = d.pinned,
+                priority = d.priority,
+                checklist = d.checklist,
+                repeatRule = if (d.cycle == Cycle.MONTHLY || d.cycle == Cycle.DAILY) d.repeatRule else "",
                 // Editing the time re-arms its alerts from now on.
                 lastFiredAt = if (scheduleChanged) System.currentTimeMillis() - 1 else base.lastFiredAt,
                 snoozedUntil = if (scheduleChanged) null else base.snoozedUntil,

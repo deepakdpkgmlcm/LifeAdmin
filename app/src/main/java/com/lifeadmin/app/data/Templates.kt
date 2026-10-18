@@ -12,6 +12,8 @@ data class Template(
     /** Weekly repeats: ISO weekdays. */
     val days: String = "",
     val alarm: Boolean = false,
+    /** Ready-made checklist steps, one per line. */
+    val steps: List<String> = emptyList(),
 )
 
 object Templates {
@@ -39,9 +41,21 @@ object Templates {
         Template("Smoke alarm battery", Category.HOME, Cycle.YEARLY),
 
         // Documents
-        Template("Passport", Category.DOCUMENT),
-        Template("Driving licence", Category.DOCUMENT),
-        Template("Visa / residence permit", Category.DOCUMENT),
+        Template(
+            "Passport", Category.DOCUMENT,
+            steps = listOf("Check the renewal rules and fee", "Get new passport photos", "Fill in the application form",
+                "Book an appointment", "Gather supporting documents", "Pay the fee", "Track the application")
+        ),
+        Template(
+            "Driving licence", Category.DOCUMENT,
+            steps = listOf("Check renewal requirements", "Medical / eye certificate if needed", "Fill in the renewal form",
+                "Pay the fee", "Book a slot if required")
+        ),
+        Template(
+            "Visa / residence permit", Category.DOCUMENT,
+            steps = listOf("Check renewal window and rules", "Collect documents and photos", "Fill in the application",
+                "Pay the fee", "Book biometrics / appointment", "Keep the receipt")
+        ),
         Template("National ID card", Category.DOCUMENT),
         Template("Professional licence", Category.DOCUMENT),
 
@@ -64,13 +78,22 @@ object Templates {
         Template("Loan EMI", Category.BILL, Cycle.MONTHLY),
 
         // Insurance
-        Template("Health insurance", Category.INSURANCE, Cycle.YEARLY),
+        Template(
+            "Health insurance", Category.INSURANCE, Cycle.YEARLY,
+            steps = listOf("Compare renewal quote with other plans", "Check sum insured and add-ons", "Update nominee details", "Pay the premium", "Download the new policy")
+        ),
         Template("Life insurance", Category.INSURANCE, Cycle.YEARLY),
         Template("Home insurance", Category.INSURANCE, Cycle.YEARLY),
 
         // Vehicle
-        Template("Car insurance", Category.VEHICLE, Cycle.YEARLY),
-        Template("Vehicle registration", Category.VEHICLE),
+        Template(
+            "Car insurance", Category.VEHICLE, Cycle.YEARLY,
+            steps = listOf("Get renewal quote", "Compare 2-3 insurers", "Check no-claim bonus", "Choose add-ons", "Pay and download the policy", "Keep a copy in the car")
+        ),
+        Template(
+            "Vehicle registration", Category.VEHICLE,
+            steps = listOf("Check renewal requirements", "Get the vehicle inspected if needed", "Pay road tax / fees", "Collect the new certificate")
+        ),
         Template("Emission / pollution test", Category.VEHICLE),
         Template("Vehicle service", Category.VEHICLE),
 

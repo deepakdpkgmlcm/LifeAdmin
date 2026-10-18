@@ -60,6 +60,10 @@ class MigrationTest {
         assertTrue(items[0].lastFiredAt > 0)
         assertEquals("", items[0].reference)
         assertEquals("", items[0].paymentMethod)
+        assertEquals(false, items[0].pinned)
+        assertEquals("", items[0].checklist)
+        db.attachmentDao().insert(Attachment(itemId = items[0].id, name = "scan.jpg", mimeType = "image/jpeg", fileName = "a.jpg"))
+        assertEquals(1, db.attachmentDao().getAll().size)
 
         // New-style items save and load.
         db.itemDao().insert(

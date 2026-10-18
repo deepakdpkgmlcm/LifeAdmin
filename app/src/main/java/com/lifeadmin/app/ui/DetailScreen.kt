@@ -67,6 +67,13 @@ import com.lifeadmin.app.util.Format
 import kotlinx.coroutines.launch
 import java.time.Instant
 import com.lifeadmin.app.data.Kind
+import com.lifeadmin.app.data.checklistEntries
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.text.style.TextDecoration
 import com.lifeadmin.app.reminders.Schedule
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -90,6 +97,7 @@ fun DetailScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     UndoSnackbarEffect(vm, snackbar)
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -121,6 +129,22 @@ fun DetailScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 HeaderIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
                 Spacer(Modifier.weight(1f))
+                HeaderIconButton(
+                    if (current.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                    if (current.pinned) "Unpin" else "Pin to top"
+                ) { vm.togglePin(current) }
+                Spacer(Modifier.width(8.dp))
+                HeaderIconButton(Icons.Outlined.Share, "Share") {
+                    context.startActivity(
+                        android.content.Intent.createChooser(
+                            android.content.Intent(android.content.Intent.ACTION_SEND)
+                                .setType("text/plain")
+                                .putExtra(android.content.Intent.EXTRA_TEXT, shareText(current, vm.defaultMinute)),
+                            "Share"
+                        )
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 HeaderIconButton(Icons.Outlined.Edit, "Edit", onEdit)
             }
 
@@ -208,8 +232,54 @@ fun DetailScreen(
                 }
             }
 
+            val steps = current.checklistEntries()
+            if (steps.isNotEmpty()) {
+                SectionLabel("Checklist · ${steps.count { it.done }}/${steps.size}", extra.muted)
+                AppCard {
+                    steps.forEachIndexed { index, step ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val updated = steps.toMutableList()
+                                    updated[index] = step.copy(done = !step.done)
+                                    vm.updateChecklist(current, updated)
+                                }
+                        ) {
+                            Checkbox(checked = step.done, onCheckedChange = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                step.text,
+                                fontSize = 15.sp,
+                                color = if (step.done) extra.muted else extra.ink,
+                                textDecoration = if (step.done) TextDecoration.LineThrough else null
+                            )
+                        }
+                    }
+                }
+            }
+
+            val streak = Schedule.streak(
+                history.map { Instant.ofEpochMilli(it.paidAt).atZone(ZoneId.systemDefault()).toLocalDate() },
+                today
+            )
+            if (current.cycle != Cycle.NONE && streak >= 2) {
+                AppCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("$streak", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("day streak", fontWeight = FontWeight.Bold)
+                            Text("Done every day in a row. Keep it going!", color = extra.muted, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
             SectionLabel("Details", extra.muted)
             AppCard {
+                if (current.priority > 0) InfoRow("Priority", "High")
                 InfoRow("Time", current.dueMinute?.let { Format.time(it) } ?: "All day")
                 InfoRow("Repeats", Format.repeatText(current))
                 if (current.cycle != Cycle.NONE) {
@@ -312,6 +382,22 @@ fun DetailScreen(
             )
         }
     }
+}
+
+/** Plain-text version of an item for sharing with someone. */
+private fun shareText(item: Item, defaultMinute: Int): String {
+    val occ = Schedule.occurrence(item, defaultMinute)
+    val lines = mutableListOf(item.title)
+    lines += (if (item.kind == Kind.RENEWAL) "Expires: " else "Due: ") + Format.date(occ.toLocalDate()) +
+        (item.dueMinute?.let { " at " + Format.time(it) } ?: "")
+    if (item.cycle != Cycle.NONE) lines += Format.repeatText(item)
+    if (item.kind != Kind.REMINDER) item.amount?.let { lines += "Amount: " + Format.money(it, item.currency) }
+    if (item.reference.isNotBlank()) lines += "Ref: " + item.reference
+    val steps = item.checklistEntries()
+    if (steps.isNotEmpty()) lines += steps.joinToString("\n") { (if (it.done) "[x] " else "[ ] ") + it.text }
+    if (item.notes.isNotBlank()) lines += item.notes
+    lines += "— shared from LifeAdmin"
+    return lines.joinToString("\n")
 }
 
 private fun reminderSummary(item: Item): String {

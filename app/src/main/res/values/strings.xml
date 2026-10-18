@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LifeAdmin</string>
+    <string name="shortcut_add_reminder">Add reminder</string>
+    <string name="shortcut_add_payment">Add bill / payment</string>
+    <string name="shortcut_add_expiry">Add document / expiry</string>
+    <string name="shortcut_calendar">Calendar</string>
 </resources>
