@@ -90,11 +90,25 @@ private fun preview(r: QuickParse.Result): String {
  * "Edit details" opens the full editor pre-filled.
  */
 @Composable
-fun QuickAddBar(vm: AppViewModel, onEditDetails: () -> Unit, modifier: Modifier = Modifier) {
+fun QuickAddBar(
+    vm: AppViewModel,
+    onEditDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Day the entry lands on when no date is typed (the calendar's selected day); null = today. */
+    baseDate: java.time.LocalDate? = null,
+    placeholder: String = "Add anything… “Pay rent 5th every month 10am”",
+) {
     val extra = Extra.colors
     val focus = LocalFocusManager.current
     var text by rememberSaveable { mutableStateOf("") }
-    val parsed = remember(text) { if (text.isBlank()) null else QuickParse.parse(text, LocalDateTime.now()) }
+    val parsed = remember(text, baseDate) {
+        if (text.isBlank()) null
+        else {
+            val now = LocalDateTime.now()
+            val base = if (baseDate == null || !baseDate.isAfter(now.toLocalDate())) now else baseDate.atStartOfDay()
+            QuickParse.parse(text, base)
+        }
+    }
 
     val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -113,7 +127,7 @@ fun QuickAddBar(vm: AppViewModel, onEditDetails: () -> Unit, modifier: Modifier 
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            placeholder = { Text("Add anything… “Pay rent 5th every month 10am”", maxLines = 1) },
+            placeholder = { Text(placeholder, maxLines = 1) },
             leadingIcon = { Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = extra.later) },
             trailingIcon = {
                 if (text.isBlank()) {

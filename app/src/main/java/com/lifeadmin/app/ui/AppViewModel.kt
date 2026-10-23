@@ -139,6 +139,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         undoEvent.value = UndoEvent("Added: ${r.title}", null)
     }
 
+    /**
+     * An empty editor draft of [kind] on [date]: reminders at the next round hour today
+     * (or the usual reminder time on other days), bills and expiries all day.
+     */
+    fun draftFor(kind: Kind, date: java.time.LocalDate): Draft {
+        val now = LocalDateTime.now()
+        val nextHour = now.plusHours(1).withMinute(0)
+        val isToday = date == now.toLocalDate()
+        val day = if (kind == Kind.REMINDER && isToday) nextHour.toLocalDate() else date
+        return Draft(
+            title = "",
+            kind = kind,
+            category = com.lifeadmin.app.data.Category.entries.first { it.defaultKind == kind },
+            dueEpochDay = day.toEpochDay(),
+            dueMinute = if (kind != Kind.REMINDER) null else if (isToday) nextHour.hour * 60 else defaultMinute,
+            cycle = Cycle.NONE,
+            repeatEvery = 1,
+            repeatDays = "",
+            repeatLimit = null,
+            repeatUntilEpochDay = null,
+            autoRenew = kind == Kind.REMINDER,
+            amount = null,
+            currency = settings.currency,
+            notes = "",
+            alertOffsets = settings.defaultAlerts(kind),
+            alertStyle = settings.defaultStyle(kind),
+            nagEveryMin = 0,
+            nagCount = 0,
+        )
+    }
+
     /** A new-item draft to open in the editor (from quick add's "Edit details" or a scan). */
     val prefill = MutableStateFlow<Draft?>(null)
 

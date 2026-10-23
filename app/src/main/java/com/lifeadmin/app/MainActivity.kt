@@ -122,31 +122,6 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-/** An empty editor draft of the given kind (for "Add reminder" style shortcuts). */
-private fun blankDraft(kind: Kind, vm: AppViewModel): Draft {
-    val nextHour = LocalDateTime.now().plusHours(1).withMinute(0)
-    return Draft(
-        title = "",
-        kind = kind,
-        category = Category.entries.first { it.defaultKind == kind },
-        dueEpochDay = if (kind == Kind.REMINDER) nextHour.toLocalDate().toEpochDay() else LocalDate.now().toEpochDay(),
-        dueMinute = if (kind == Kind.REMINDER) nextHour.hour * 60 else null,
-        cycle = Cycle.NONE,
-        repeatEvery = 1,
-        repeatDays = "",
-        repeatLimit = null,
-        repeatUntilEpochDay = null,
-        autoRenew = kind == Kind.REMINDER,
-        amount = null,
-        currency = vm.settings.currency,
-        notes = "",
-        alertOffsets = vm.settings.defaultAlerts(kind),
-        alertStyle = vm.settings.defaultStyle(kind),
-        nagEveryMin = 0,
-        nagCount = 0,
-    )
-}
-
 private const val TAB_ANIM = 200
 private const val PUSH_ANIM = 280
 
@@ -174,9 +149,9 @@ private fun AppRoot(skipSplash: Boolean, shortcut: String?, consumeShortcut: () 
         consumeShortcut()
         if (!vm.settings.onboarded) return@LaunchedEffect
         when (action.removePrefix(MainActivity.SHORTCUT_PREFIX)) {
-            "ADD_REMINDER" -> { vm.prefill.value = blankDraft(Kind.REMINDER, vm); nav.navigate("edit") }
-            "ADD_PAYMENT" -> { vm.prefill.value = blankDraft(Kind.PAYMENT, vm); nav.navigate("edit") }
-            "ADD_EXPIRY" -> { vm.prefill.value = blankDraft(Kind.RENEWAL, vm); nav.navigate("edit") }
+            "ADD_REMINDER" -> { vm.prefill.value = vm.draftFor(Kind.REMINDER, LocalDate.now()); nav.navigate("edit") }
+            "ADD_PAYMENT" -> { vm.prefill.value = vm.draftFor(Kind.PAYMENT, LocalDate.now()); nav.navigate("edit") }
+            "ADD_EXPIRY" -> { vm.prefill.value = vm.draftFor(Kind.RENEWAL, LocalDate.now()); nav.navigate("edit") }
             "CALENDAR" -> goTab(Tab.CALENDAR)
         }
     }
@@ -247,7 +222,12 @@ private fun AppRoot(skipSplash: Boolean, shortcut: String?, consumeShortcut: () 
             )
         }
         composable(Tab.CALENDAR.route) {
-            CalendarScreen(vm = vm, onOpen = { nav.openItem(it) }, bottomBar = { bar(Tab.CALENDAR) })
+            CalendarScreen(
+                vm = vm,
+                onOpen = { nav.openItem(it) },
+                onAdd = { nav.navigate("edit") },
+                bottomBar = { bar(Tab.CALENDAR) }
+            )
         }
         composable(Tab.ITEMS.route) {
             ItemsScreen(

@@ -9,6 +9,7 @@ import com.lifeadmin.app.data.dueDate
 import com.lifeadmin.app.data.isRepeating
 import com.lifeadmin.app.data.repeatDayList
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
@@ -177,6 +178,44 @@ object Schedule {
     }
 
     /** The item moved to occurrence [to]. */
+    /**
+     * Every day in [from]..[to] this item falls on: its current date plus the repeats that follow
+     * (respecting "ends after N times" and "ends on"). Hourly or minute repeats count once per day.
+     * The current date is included even when it is overdue.
+     */
+    fun datesInRange(item: Item, from: LocalDate, to: LocalDate, defaultMinute: Int, max: Int = 400): List<LocalDate> {
+        val out = LinkedHashSet<LocalDate>()
+        var t = occurrence(item, defaultMinute)
+        if (!t.toLocalDate().isBefore(from) && !t.toLocalDate().isAfter(to)) out += t.toLocalDate()
+        if (!item.isRepeating) return out.toList()
+        val subDaily = item.cycle == Cycle.MINUTES || item.cycle == Cycle.HOURS
+        var remaining = item.repeatLimit ?: Int.MAX_VALUE
+        var guard = 0
+        while (remaining > 0 && out.size < max && guard < 5_000) {
+            guard++
+            // Without a repeat limit, jump straight to the visible range.
+            val after = when {
+                subDaily -> t.toLocalDate().atTime(23, 59, 59)
+                item.repeatLimit == null && t.toLocalDate().isBefore(from.minusDays(1)) -> from.minusDays(1).atTime(23, 59, 59)
+                else -> t
+            }
+            val base = if (after.isAfter(t)) after else t
+            val next = nextOccurrence(item, base, defaultMinute) ?: break
+            if (item.repeatLimit != null) {
+                // Hourly repeats with a limit: count each time, not each day.
+                remaining -= if (subDaily) {
+                    val step = item.repeatEvery.coerceAtLeast(1).toLong() * (if (item.cycle == Cycle.HOURS) 60 else 1)
+                    (ChronoUnit.MINUTES.between(t, next) / step).toInt().coerceAtLeast(1)
+                } else 1
+                if (remaining < 0) break
+            }
+            if (next.toLocalDate().isAfter(to)) break
+            if (!next.toLocalDate().isBefore(from)) out += next.toLocalDate()
+            t = next
+        }
+        return out.toList()
+    }
+
     fun movedTo(item: Item, to: LocalDateTime): Item = item.copy(
         dueEpochDay = to.toLocalDate().toEpochDay(),
         dueMinute = if (item.dueMinute == null && item.cycle != Cycle.MINUTES && item.cycle != Cycle.HOURS) {
